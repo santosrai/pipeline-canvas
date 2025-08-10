@@ -25,10 +25,10 @@ export const createMolstarBuilder = (
       }
 
       try {
-        // Clear any existing structure before loading a new one
-        if (currentStructure) {
-          await this.clearStructure();
-        }
+        // Always clear any existing structures in the scene before loading a new one.
+        // This avoids having multiple proteins displayed at once if a default or
+        // previous structure was loaded outside of this builder's lifecycle.
+        await this.clearStructure();
         
         const url = getPDBUrl(pdbId);
         
@@ -142,9 +142,22 @@ export const createMolstarBuilder = (
     },
 
     async clearStructure() {
-      if (currentStructure) {
-        await plugin.managers.structure.hierarchy.remove([currentStructure]);
-        currentStructure = null;
+      try {
+        // Remove any known current structure first
+        if (currentStructure) {
+          await plugin.managers.structure.hierarchy.remove([currentStructure]);
+          currentStructure = null;
+        }
+
+        // Additionally, ensure all existing root structures are removed
+        const hierarchy = plugin.managers.structure.hierarchy;
+        const existing = (hierarchy as any)?.current?.structures ?? [];
+        if (Array.isArray(existing) && existing.length > 0) {
+          await hierarchy.remove(existing as any);
+        }
+      } catch (e) {
+        // Swallow errors to keep UX smooth; subsequent loads will overwrite
+        console.warn('[Molstar] clearStructure failed, continuing', e);
       }
     }
   };

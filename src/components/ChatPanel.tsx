@@ -36,6 +36,54 @@ export const ChatPanel: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
+  const renderMessageContent = (content: string) => {
+    try {
+      const parsed = JSON.parse(content);
+      return (
+        <pre className="text-xs whitespace-pre-wrap bg-white border border-gray-200 rounded p-2 overflow-x-auto">
+          {JSON.stringify(parsed, null, 2)}
+        </pre>
+      );
+    } catch {
+      // not JSON
+    }
+
+    const lines = content.trim().split(/\r?\n/).filter(Boolean);
+    const looksLikeTable =
+      lines.length >= 2 &&
+      lines[0].includes("|") &&
+      (/^-+\|(-+\|?)+$/.test(lines[1].replace(/\s+/g, "")) || lines[1].includes("|"));
+
+    if (looksLikeTable) {
+      const header = lines[0].split("|").map(s => s.trim());
+      const dataRows = lines.slice(2).map(l => l.split("|").map(s => s.trim()));
+      return (
+        <div className="overflow-x-auto">
+          <table className="text-xs w-full border border-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                {header.map((h, i) => (
+                  <th key={i} className="text-left px-2 py-1 border-b border-gray-200">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {dataRows.map((r, ri) => (
+                <tr key={ri} className={ri % 2 ? 'bg-gray-50' : ''}>
+                  {r.map((c, ci) => (
+                    <td key={ci} className="px-2 py-1 align-top border-b border-gray-100">{c || '-'}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    return <p className="text-sm">{content}</p>;
+  };
+
   const isLikelyVisualization = (text: string): boolean => {
     const p = String(text || '').toLowerCase();
     const keywords = [
@@ -183,7 +231,11 @@ try {
                   : 'bg-gray-100 text-gray-900'
               }`}
             >
-              <p className="text-sm">{message.content}</p>
+              {message.type === 'ai' ? (
+                renderMessageContent(message.content)
+              ) : (
+                <p className="text-sm">{message.content}</p>
+              )}
               <div className="text-xs mt-1 opacity-70">
                 {message.timestamp.toLocaleTimeString()}
               </div>

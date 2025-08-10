@@ -2,6 +2,11 @@ import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { createMolstarBuilder, MolstarBuilder } from './molstarBuilder';
 import { useAppStore } from '../stores/appStore';
 
+// Cache a single builder per plugin instance so that the currentStructure
+// is preserved across multiple executions (e.g., when AI code modifies
+// the existing view without calling loadStructure again).
+const BUILDER_KEY: symbol = Symbol.for('novoprotein.molstarBuilder');
+
 export interface ExecutionResult {
   success: boolean;
   message: string;
@@ -15,13 +20,20 @@ export class CodeExecutor {
   constructor(plugin: PluginUIContext) {
     this.plugin = plugin;
     const setLastLoadedPdb = useAppStore.getState?.().setLastLoadedPdb;
-    this.builder = createMolstarBuilder(plugin, (pdbId: string) => {
-      try {
-        if (typeof setLastLoadedPdb === 'function') setLastLoadedPdb(pdbId);
-      } catch {
-        // ignore
-      }
-    });
+
+    // Reuse an existing builder attached to the plugin if present
+    const pluginAny = plugin as unknown as Record<string | symbol, any>;
+    if (!pluginAny[BUILDER_KEY]) {
+      pluginAny[BUILDER_KEY] = createMolstarBuilder(plugin, (pdbId: string) => {
+        try {
+          if (typeof setLastLoadedPdb === 'function') setLastLoadedPdb(pdbId);
+        } catch {
+          // ignore
+        }
+      });
+    }
+
+    this.builder = pluginAny[BUILDER_KEY] as MolstarBuilder;
   }
 
   async executeCode(code: string): Promise<ExecutionResult> {
