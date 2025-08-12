@@ -26,6 +26,7 @@ export const ChatPanel: React.FC = () => {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [lastAgentId, setLastAgentId] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -120,7 +121,48 @@ export const ChatPanel: React.FC = () => {
         console.log('[AI] route:request', payload);
         const response = await api.post('/agents/route', payload);
         console.log('[AI] route:response', response?.data);
+        
+        const agentId = response.data?.agentId;
         const agentType = response.data?.type as 'code' | 'text' | undefined;
+        const reason = response.data?.reason;
+        
+        // Enhanced logging for agent selection
+        if (agentId) {
+          console.log(`🎯 [AGENT SELECTED] ${agentId} (${agentType}) - Reason: ${reason}`);
+          
+          // Special logging for RAG agents
+          if (agentId === 'mvs-builder') {
+            console.log('🧠 [RAG AGENT] MVS agent will use Pinecone RAG enhancement');
+          } else if (agentId === 'code-builder') {
+            console.log('⚡ [SIMPLE AGENT] Basic Molstar builder agent');
+          } else if (agentId === 'bio-chat') {
+            console.log('💬 [CHAT AGENT] Bioinformatics Q&A agent');
+          }
+        }
+        
+        // Check if agent changed and we need to clear the viewer
+        if (agentId && agentId !== lastAgentId && lastAgentId !== '') {
+          console.log(`[Agent Switch] ${lastAgentId} → ${agentId}, clearing viewer`);
+          
+          // Clear the current code and viewer state
+          setCurrentCode('');
+          
+          // Clear the 3D viewer if plugin is available
+          if (plugin) {
+            try {
+              const executor = new CodeExecutor(plugin);
+              await executor.executeCode('try { await builder.clearStructure(); } catch(e) { console.warn("Clear failed:", e); }');
+              console.log('[Agent Switch] Viewer cleared successfully');
+            } catch (e) {
+              console.warn('[Agent Switch] Failed to clear viewer:', e);
+            }
+          }
+        }
+        
+        // Update the last agent ID
+        if (agentId) {
+          setLastAgentId(agentId);
+        }
         if (agentType === 'text') {
           const aiText = response.data?.text || 'Okay.';
           console.log('[AI] route:text', { text: aiText?.slice?.(0, 400) });

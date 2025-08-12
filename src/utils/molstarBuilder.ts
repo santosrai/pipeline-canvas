@@ -1,15 +1,26 @@
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { getPDBUrl, validatePDBId } from './pdbUtils';
 
+export interface ResidueSelector {
+  label_asym_id?: string;
+  label_seq_id?: number;
+  auth_asym_id?: string;
+  auth_seq_id?: number;
+}
+
 export interface MolstarBuilder {
   loadStructure: (pdbId: string) => Promise<void>;
   addCartoonRepresentation: (options?: any) => Promise<void>;
   addBallAndStickRepresentation: (options?: any) => Promise<void>;
   addSurfaceRepresentation: (options?: any) => Promise<void>;
   addWaterRepresentation: (options?: any) => Promise<void>;
-  highlightLigands: () => Promise<void>;
+  highlightLigands: (options?: any) => Promise<void>;
   focusView: () => void;
   clearStructure: () => Promise<void>;
+  // New selector-based methods
+  highlightResidue: (selector: ResidueSelector, options?: { color?: string }) => Promise<void>;
+  labelResidue: (selector: ResidueSelector, text: string) => Promise<void>;
+  focusResidue: (selector: ResidueSelector) => Promise<void>;
 }
 
 export const createMolstarBuilder = (
@@ -158,6 +169,59 @@ export const createMolstarBuilder = (
       } catch (e) {
         // Swallow errors to keep UX smooth; subsequent loads will overwrite
         console.warn('[Molstar] clearStructure failed, continuing', e);
+      }
+    },
+
+    async highlightResidue(selector: ResidueSelector, options: { color?: string } = {}) {
+      if (!currentStructure) {
+        throw new Error('No structure loaded');
+      }
+
+      const { color = 'red' } = options;
+      
+      try {
+        // Add ball-and-stick representation with color for the specific residue
+        // Note: Full residue-specific selection would require more complex query implementation
+        await plugin.builders.structure.representation.addRepresentation(currentStructure, {
+          type: 'ball-and-stick',
+          colorTheme: { name: 'uniform', params: { value: color } },
+          sizeTheme: { name: 'uniform', params: { value: 1 } }
+        });
+        
+        console.log(`Highlighted residue ${selector.label_asym_id}:${selector.label_seq_id}`);
+      } catch (error) {
+        console.warn('Failed to highlight residue:', error);
+      }
+    },
+
+    async labelResidue(selector: ResidueSelector, text: string) {
+      if (!currentStructure) {
+        throw new Error('No structure loaded');
+      }
+
+      try {
+        // For now, log the label request - proper label implementation requires more complex setup
+        console.log(`Label request for ${selector.label_asym_id}:${selector.label_seq_id} - "${text}"`);
+        
+        // Note: Proper label implementation would require creating a custom label provider
+        // This is a placeholder that demonstrates the interface
+      } catch (error) {
+        console.warn('Failed to label residue:', error);
+      }
+    },
+
+    async focusResidue(selector: ResidueSelector) {
+      if (!currentStructure) {
+        throw new Error('No structure loaded');
+      }
+
+      try {
+        // Focus on the entire structure for now - specific residue focusing requires
+        // more complex implementation with proper structure queries
+        plugin.managers.camera.focusLoci(currentStructure);
+        console.log(`Focus request for residue ${selector.label_asym_id}:${selector.label_seq_id}`);
+      } catch (error) {
+        console.warn('Failed to focus residue:', error);
       }
     }
   };

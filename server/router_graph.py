@@ -47,16 +47,50 @@ class SimpleRouterGraph:
             return {"routedAgentId": "uniprot-search", "reason": "rule:uniprot-search"}
         if selection and any(k in low for k in interrogatives):
             return {"routedAgentId": "bio-chat", "reason": "rule:selection+question"}
+        
+        # MVS vs Simple Code routing rules
+        mvs_keywords = [
+            "label", "labels", "annotate", "highlight", "annotation", "text", "custom label", 
+            "multiple", "complex", "declarative", "scene", "components",
+            "fluent api", "mvs", "molviewspec", "specification", "write text", 
+            "add text", "name the", "call it", "mark as", "tag as"
+        ]
+        
+        simple_keywords = [
+            "show", "display", "load", "basic", "simple", "just show", 
+            "only show", "quick", "basic view", "disable", "enable", "remove", "add", "set", "get", "show", "display", "load", "basic", "simple", "just show", 
+        ]
+        
+        mvs_signals = any(k in low for k in mvs_keywords)
+        simple_signals = any(k in low for k in simple_keywords)
+        
+        # Strong MVS signals (without simple override)
+        if mvs_signals and not simple_signals:
+            return {"routedAgentId": "mvs-builder", "reason": "rule:mvs-keywords"}
+        
+        # Strong simple signals (without MVS override)  
+        if simple_signals and not mvs_signals:
+            return {"routedAgentId": "code-builder", "reason": "rule:simple-keywords"}
 
         # Semantic routing: input against agent vectors
         if not input_text.strip() or not self.agent_vecs or not self.embeddings:
             # Use keyword heuristic only
-            keywords = [
+            # Enhanced keyword heuristic with MVS detection
+            mvs_keywords = ["label", "labels", "annotate", "annotation", "text", "custom", "multiple", "complex"]
+            code_keywords = [
                 "show ", "display ", "visualize", "render", "color", "colour", "cartoon", "surface", "ball-and-stick", "water", "ligand", "focus", "zoom", "load", "pdb", "highlight", "chain", "view", "representation",
             ]
-            likely_code = any(k in low for k in keywords)
-            chosen = "code-builder" if likely_code else "bio-chat"
-            return {"routedAgentId": chosen, "reason": "default:heuristic-no-embeddings"}
+            
+            has_mvs = any(k in low for k in mvs_keywords)
+            has_code = any(k in low for k in code_keywords)
+            
+            if has_mvs:
+                chosen = "mvs-builder"
+            elif has_code:
+                chosen = "code-builder"
+            else:
+                chosen = "bio-chat"
+            return {"routedAgentId": chosen, "reason": "default:enhanced-heuristic-no-embeddings"}
 
         q_vec = await self.embeddings.aembed_query(input_text)  # type: ignore[attr-defined]
 
@@ -83,12 +117,22 @@ class SimpleRouterGraph:
 
         if best_score < self.threshold or (best_score - second_score) < self.margin:
             # fallback logic: simple heuristic using keywords
-            keywords = [
+            # Enhanced fallback with MVS detection
+            mvs_keywords = ["label", "labels", "annotate", "annotation", "text", "custom", "multiple", "complex"]
+            code_keywords = [
                 "show ", "display ", "visualize", "render", "color", "colour", "cartoon", "surface", "ball-and-stick", "water", "ligand", "focus", "zoom", "load", "pdb", "highlight", "chain", "view", "representation",
             ]
-            likely_code = any(k in low for k in keywords)
-            chosen = "code-builder" if likely_code else "bio-chat"
-            return {"routedAgentId": chosen, "reason": f"llm-fallback:score={best_score:.2f},margin={best_score-second_score:.2f}"}
+            
+            has_mvs = any(k in low for k in mvs_keywords)
+            has_code = any(k in low for k in code_keywords)
+            
+            if has_mvs:
+                chosen = "mvs-builder"
+            elif has_code:
+                chosen = "code-builder"
+            else:
+                chosen = "bio-chat"
+            return {"routedAgentId": chosen, "reason": f"enhanced-fallback:score={best_score:.2f},margin={best_score-second_score:.2f}"}
 
         return {
             "routedAgentId": best_key,

@@ -1,0 +1,811 @@
+Directory structure:
+└── mvs-stories/
+    ├── readme.md
+    ├── context.ts
+    ├── index.html
+    ├── index.tsx
+    ├── styles.scss
+    ├── version.ts
+    └── elements/
+        ├── index.ts
+        ├── snapshot-markdown.tsx
+        └── viewer.tsx
+
+================================================
+FILE: src/apps/mvs-stories/readme.md
+================================================
+# MolViewSpec Stories App
+
+An app that defines `mvs-stories-snapshot-markdown` and `mvs-stories-viewer` web components that can be used to view MolViewSpec molecular stories.
+
+See the [mvs-stories](../../examples/mvs-stories) example that includes specific stories.
+
+### Usage
+
+- Get `mvs-stories.css` and `mvs-stories.js` from `build/mvs-stories` and include these to your HTML page
+
+```html
+<link rel="stylesheet" type="text/css" href="mvs-stories.css" />
+<script type="text/javascript" src="mvs-stories.js"></script>
+```
+
+Can also use `https://cdn.jsdelivr.net/npm/molstar@latest/build/mvs-stories/mvs-stories.js` (and `.css`). `latest` can be substituted by specific version.
+
+- Place the components in your page wrapper in `<div>` elements to set up positioning:
+
+```html
+<div class="viewer">
+    <mvs-stories-viewer />
+</div>
+<div class="snapshot">
+    <mvs-stories-snapshot-markdown />
+</div>
+```
+
+- Load MolViewSpec state:
+
+```html
+<script>
+mvsStories.loadFromURL('https://raw.githubusercontent.com/molstar/molstar/master/examples/mvs/1cbs.mvsj');
+</script>
+```
+ 
+- See [index.html](./index.html) for full example of how to embed the app.
+
+- For interactive development build (for production use `npm run build`) of the example that immediately reflects changes use:
+
+```bash
+npm run dev -- -a mvs-stories
+```
+
+### Multiple Stories on a Single Page
+
+To support multiple instances of stories, use the `context-name='unique-name'` attribute  on the `mvs-` components together with `loadFromURL/Data(..., { contextName: 'unique-name' })`.
+
+For example (simplified to not include layout):
+
+```html
+<div>
+    <mvs-stories-viewer context-name="1" />
+    <mvs-stories-snapshot-markdown context-name="1" />
+</div>
+<div>
+    <mvs-stories-viewer context-name="2" />
+    <mvs-stories-snapshot-markdown context-name="2" />
+</div>
+
+<script>
+    mvsStories.loadFromURL('1.mvsj', { format: 'mvsj', contextName: '1' });
+    mvsStories.loadFromURL('2.mvsj', { format: 'mvsj', contextName: '2' });
+</script>
+
+```
+
+
+================================================
+FILE: src/apps/mvs-stories/context.ts
+================================================
+/**
+ * Copyright (c) 2025 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ *
+ * @author David Sehnal <david.sehnal@gmail.com>
+ */
+
+import { BehaviorSubject } from 'rxjs';
+import { MVSData } from '../../extensions/mvs/mvs-data';
+import type { MVSStoriesViewerModel } from './elements/viewer';
+
+export type MVSStoriesCommand =
+    | { kind: 'load-mvs', format?: 'mvsj' | 'mvsx', url?: string, data?: MVSData | string | Uint8Array }
+
+
+export class MVSStoriesContext {
+    commands = new BehaviorSubject<MVSStoriesCommand | undefined>(undefined);
+    state = {
+        viewers: new BehaviorSubject<{ name?: string, model: MVSStoriesViewerModel }[]>([]),
+        currentStoryData: new BehaviorSubject<string | Uint8Array | undefined>(undefined),
+        isLoading: new BehaviorSubject(false),
+    };
+
+    dispatch(command: MVSStoriesCommand) {
+        this.commands.next(command);
+    }
+
+    constructor(public name?: string) {
+    }
+}
+
+export function getMVSStoriesContext(options?: { name?: string, container?: object }): MVSStoriesContext {
+    const container: any = options?.container ?? window;
+    container.componentContexts ??= {};
+    const name = options?.name ?? '<default>';
+    if (!container.componentContexts[name]) {
+        container.componentContexts[name] = new MVSStoriesContext(options?.name);
+    }
+    return container.componentContexts[name];
+}
+
+
+================================================
+FILE: src/apps/mvs-stories/index.html
+================================================
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <link rel="icon" href="./favicon.ico" type="image/x-icon">
+    <title>Molecular Stories</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        #viewer {
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 34%;
+            bottom: 0;
+        }
+
+        #controls {
+            position: absolute;
+            left: 66%;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            padding: 16px;
+            padding-bottom: 20px;
+            border: 1px solid #ccc;
+            border-left: none;
+            background: #F6F5F3;
+            z-index: -2;
+            display: flex; 
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        #links {
+            position: absolute;
+            bottom: 4px;
+            right: 8px;
+            font-family: "Raleway", "HelveticaNeue", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 0.6rem;
+            z-index: -1;
+            color: #666;
+        }
+
+        #links a {
+            color: #666;
+            text-decoration: none;
+        }
+
+        @media (orientation:portrait) {
+            #viewer {
+                position: absolute;
+                left: 0;
+                top: 0;
+                right: 0;
+                bottom: 40%;
+            }
+
+            #controls {
+                position: absolute;
+                left: 0;
+                top: 60%;
+                right: 0;
+                bottom: 0;  
+                border-top: none;  
+            }
+
+            .msp-viewport-controls-buttons {
+                display: none;
+            }
+        }
+    </style>
+    <link rel="stylesheet" type="text/css" href="mvs-stories.css" />
+    <script type="text/javascript" src="mvs-stories.js"></script>
+</head>
+
+<body>
+    <!-- the context-name parameter is optional and useful when embedding multiple stories in a single page -->
+    <div id="viewer">
+        <mvs-stories-viewer context-name="story1" ></mvs-stories-viewer>
+    </div>
+    <div id="controls">
+        <mvs-stories-snapshot-markdown context-name="story1" style="flex-grow: 1;" ></mvs-stories-snapshot-markdown>
+    </div>
+
+    <div id="links">
+        <a href="#" id="mvs-data">Download MVS State</a> | <a href="https://github.com/molstar/molstar/tree/master/src/apps/mvs-stories" id="mvs-data" target="_blank" rel="noopener noreferrer">Source Code</a>
+    </div>
+
+    <script>
+        var urlParams = new URLSearchParams(window.location.search);
+        var storyId = urlParams.get('story-id');
+        var storyUrl = urlParams.get('story-url');
+        var format = urlParams.get('data-format');
+
+        // For testing purposes:
+        // if (!storyUrl) {
+        //     storyUrl = 'https://raw.githubusercontent.com/molstar/molstar/master/examples/mvs/kinase-story.mvsj';
+        // }
+
+        if (storyId) {
+            mvsStories.loadFromID(storyId, { format: format || 'mvsj', contextName: 'story1' });
+        } else if (storyUrl) {
+            mvsStories.loadFromURL(storyUrl, { format: format || 'mvsj', contextName: 'story1' });
+        }
+
+        document.getElementById('mvs-data').addEventListener('click', (e) => {
+            e.preventDefault();
+            mvsStories.downloadCurrentStory({ contextName: 'story1' });
+        });
+    </script>
+    <!-- __MOLSTAR_ANALYTICS__ -->
+</body>
+
+</html>
+
+
+================================================
+FILE: src/apps/mvs-stories/index.tsx
+================================================
+/**
+ * Copyright (c) 2025 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ *
+ * @author David Sehnal <david.sehnal@gmail.com>
+ */
+
+import { getMVSStoriesContext } from './context';
+import './elements';
+import { MVSData } from '../../extensions/mvs/mvs-data';
+import { download } from '../../mol-util/download';
+
+import './favicon.ico';
+import '../../mol-plugin-ui/skin/light.scss';
+import './styles.scss';
+import './index.html';
+
+export function getContext(name?: string) {
+    return getMVSStoriesContext({ name });
+}
+
+export function loadFromURL(url: string, options?: { format: 'mvsx' | 'mvsj', contextName?: string }) {
+    setTimeout(() => {
+        getContext(options?.contextName).dispatch({
+            kind: 'load-mvs',
+            format: options?.format ?? 'mvsj',
+            url,
+        });
+    }, 0);
+}
+
+export function loadFromData(data: MVSData | string | Uint8Array, options?: { format: 'mvsx' | 'mvsj', contextName?: string }) {
+    setTimeout(() => {
+        getContext(options?.contextName).dispatch({
+            kind: 'load-mvs',
+            format: options?.format ?? 'mvsj',
+            data,
+        });
+    }, 0);
+}
+
+function getStoryUrlFromId(id: string, format: 'mvsx' | 'mvsj' = 'mvsj') {
+    return `https://stories.molstar.org/api/story/${id}/data`;
+}
+
+export function loadFromID(id: string, options?: { format?: 'mvsx' | 'mvsj', contextName?: string }) {
+    loadFromURL(
+        getStoryUrlFromId(id, options?.format),
+        { format: options?.format ?? 'mvsj', contextName: options?.contextName },
+    );
+}
+
+export function downloadCurrentStory(options?: { contextName?: string, filename?: string }) {
+    const story = getContext(options?.contextName).state.currentStoryData.value;
+    if (!story) return;
+
+    const isMVSJ = typeof story === 'string';
+    const filename = `${options?.filename ?? 'story'}.${isMVSJ ? 'mvsj' : 'mvsx'}`;
+    download(
+        new Blob([typeof story === 'string' ? story : story.buffer], { type: isMVSJ ? 'application/json' : 'application/octet-stream' }),
+        filename
+    );
+};
+
+export { MVSData };
+
+
+================================================
+FILE: src/apps/mvs-stories/styles.scss
+================================================
+@use '../../mol-plugin-ui/skin/base/components/markdown.scss';
+
+.mvs-stories-markdown-explanation {
+    // Adapted from skeleton.css, The MIT License (MIT), Copyright (c) 2011-2014 Dave Gamache 
+    line-height: 1.4;
+    font-weight: 400;
+    font-family: "Raleway", "HelveticaNeue", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: #222;
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+        margin-top: 0;
+        margin-bottom: 1rem;
+        font-weight: 300;
+    }
+
+    h1 {
+        font-size: 3rem;
+        line-height: 1.2;
+        letter-spacing: -.1rem;
+    }
+
+    h2 {
+        font-size: 2.6rem;
+        line-height: 1.25;
+        letter-spacing: -.1rem;
+    }
+
+    h3 {
+        font-size: 2rem;
+        line-height: 1.3;
+        letter-spacing: -.1rem;
+    }
+
+    h4 {
+        font-size: 1.7rem;
+        line-height: 1.35;
+        letter-spacing: -.08rem;
+    }
+
+    h5 {
+        font-size: 1.4rem;
+        line-height: 1.5;
+        letter-spacing: -.05rem;
+    }
+
+    h6 {
+        font-size: 1.1rem;
+        line-height: 1.6;
+        letter-spacing: 0;
+    }
+
+    button {
+        display: inline-block;
+        height: 38px;
+        padding: 0 24px;
+        color: #555;
+        text-align: center;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 38px;
+        letter-spacing: .1rem;
+        text-transform: uppercase;
+        text-decoration: none;
+        white-space: nowrap;
+        background-color: transparent;
+        border-radius: 4px;
+        border: 1px solid #bbb;
+        cursor: pointer;
+        box-sizing: border-box;
+    }
+
+    ul {
+        list-style: circle inside;
+    }
+
+    ol {
+        list-style: decimal inside;
+    }
+
+    ol,
+    ul {
+        padding-left: 0;
+        margin-top: 0;
+    }
+
+    ul ul,
+    ul ol,
+    ol ol,
+    ol ul {
+        margin: 1.5rem 0 1.5rem 3rem;
+        font-size: 90%;
+    }
+
+    li {
+        margin-bottom: 0.2rem;
+    }
+
+    code {
+        padding: .2rem .5rem;
+        margin: 0 .2rem;
+        font-size: 90%;
+        white-space: nowrap;
+        background: #F1F1F1;
+        border: 1px solid #E1E1E1;
+        border-radius: 4px;
+    }
+
+    pre>code {
+        display: block;
+        padding: 1rem 1.5rem;
+        white-space: pre;
+    }
+
+    th,
+    td {
+        padding: 12px 15px;
+        text-align: left;
+        border-bottom: 1px solid #E1E1E1;
+    }
+
+    th:first-child,
+    td:first-child {
+        padding-left: 0;
+    }
+
+    th:last-child,
+    td:last-child {
+        padding-right: 0;
+    }
+
+    button,
+    .button {
+        margin-bottom: 1rem;
+    }
+
+    input,
+    textarea,
+    select,
+    fieldset {
+        margin-bottom: 1.5rem;
+    }
+
+    pre,
+    blockquote,
+    dl,
+    figure,
+    table,
+    p,
+    ul,
+    ol,
+    form {
+        margin-bottom: 1rem;
+    }
+
+    hr {
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+        border-width: 0;
+        border-top: 1px solid #E1E1E1;
+    }
+
+    table {
+        border: 1px solid #E1E1E1;
+        border-collapse: collapse;
+    }
+
+    th {
+        text-align: left;
+    }
+
+    th, td {
+        border: 1px solid #E1E1E1;
+        padding: 4px 8px;
+    }
+
+    img {
+        max-width: 100%;
+        height: auto;
+    }
+}
+
+@media (orientation:portrait) {
+    .mvs-stories-markdown-explanation {
+        font-size: 0.9rem;    
+    }
+
+    .mvs-stories-markdown-explanation h3 {
+        font-size: 1.5rem;
+    }
+}
+
+
+================================================
+FILE: src/apps/mvs-stories/version.ts
+================================================
+/**
+ * Copyright (c) 2025 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ *
+ * @author David Sehnal <david.sehnal@gmail.com>
+ */
+
+export const VERSION = 1;
+
+
+================================================
+FILE: src/apps/mvs-stories/elements/index.ts
+================================================
+import './snapshot-markdown';
+import './viewer';
+
+
+================================================
+FILE: src/apps/mvs-stories/elements/snapshot-markdown.tsx
+================================================
+/**
+ * Copyright (c) 2025 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ *
+ * @author David Sehnal <david.sehnal@gmail.com>
+ */
+
+import { BehaviorSubject, distinctUntilChanged, map } from 'rxjs';
+import { PluginComponent } from '../../../mol-plugin-state/component';
+import { getMVSStoriesContext, MVSStoriesContext } from '../context';
+import { MVSStoriesViewerModel } from './viewer';
+import { useBehavior } from '../../../mol-plugin-ui/hooks/use-behavior';
+import { createRoot } from 'react-dom/client';
+import { PluginStateSnapshotManager } from '../../../mol-plugin-state/manager/snapshots';
+import { PluginReactContext } from '../../../mol-plugin-ui/base';
+import { CSSProperties } from 'react';
+import { Markdown } from '../../../mol-plugin-ui/controls/markdown';
+
+export class MVSStoriesSnapshotMarkdownModel extends PluginComponent {
+    readonly context: MVSStoriesContext;
+    root: HTMLElement | undefined = undefined;
+
+    state = new BehaviorSubject<{
+        entry?: PluginStateSnapshotManager.Entry,
+        index?: number,
+        all: PluginStateSnapshotManager.Entry[],
+    }>({ all: [] });
+
+    get viewer() {
+        return this.context.state.viewers.value?.find(v => this.options?.viewerName === v.name);
+    }
+
+    sync() {
+        const mng = this.viewer?.model.plugin?.managers.snapshot;
+        this.state.next({
+            entry: mng?.current,
+            index: mng?.current ? mng?.getIndex(mng.current) : undefined,
+            all: mng?.state.entries.toArray() ?? [],
+        });
+    }
+
+    async mount(root: HTMLElement) {
+        this.root = root;
+
+        createRoot(root).render(<MVSStoriesSnapshotMarkdownUI model={this} />);
+
+        let currentViewer: MVSStoriesViewerModel | undefined = undefined;
+        let sub: { unsubscribe: () => void } | undefined = undefined;
+        this.subscribe(this.context.state.viewers.pipe(
+            map(xs => xs.find(v => this.options?.viewerName === v.name)),
+            distinctUntilChanged((a, b) => a?.model === b?.model)
+        ), viewer => {
+            if (currentViewer !== viewer) {
+                currentViewer = viewer?.model;
+                sub?.unsubscribe();
+            }
+            if (!viewer) return;
+            sub = this.subscribe(viewer.model.plugin?.managers.snapshot.events.changed, () => {
+                this.sync();
+            });
+            this.sync();
+        });
+
+        this.sync();
+    }
+
+    constructor(private options?: { context?: { name?: string, container?: object }, viewerName?: string }) {
+        super();
+
+        this.context = getMVSStoriesContext(options?.context);
+    }
+}
+
+export function MVSStoriesSnapshotMarkdownUI({ model }: { model: MVSStoriesSnapshotMarkdownModel }) {
+    const state = useBehavior(model.state);
+    const isLoading = useBehavior(model.context.state.isLoading);
+
+    const style: CSSProperties = { display: 'flex', flexDirection: 'column', height: '100%' };
+    const className = 'mvs-stories-markdown-explanation';
+
+    if (isLoading) {
+        return <div style={style} className={className}>
+            <i>Loading...</i>
+        </div>;
+    }
+
+    if (state.all.length === 0) {
+        return <div style={style} className={className}>
+            <i>No snapshot loaded or no description available</i>
+        </div>;
+    }
+
+    return <div style={style} className={className}>
+        <div style={{ display: 'flex', flexDirection: 'row', width: '100%', gap: '8px' }}>
+            <span style={{ lineHeight: '38px', minWidth: 60, maxWidth: 60, flexShrink: 0 }}>{typeof state.index === 'number' ? state.index + 1 : '-'}/{state.all.length}</span>
+            <button onClick={() => model.viewer?.model.plugin?.managers.snapshot.applyNext(-1)} style={{ flexGrow: 1, flexShrink: 0 }}>Prev</button>
+            <button onClick={() => model.viewer?.model.plugin?.managers.snapshot.applyNext(1)} style={{ flexGrow: 1, flexShrink: 0 }}>Next</button>
+        </div>
+        <div style={{ flexGrow: 1, overflow: 'hidden', overflowY: 'auto', position: 'relative' }}>
+            <div style={{ position: 'absolute', inset: 0 }}>
+                <PluginReactContext.Provider value={model.viewer?.model.plugin as any}>
+                    <Markdown>{state.entry?.description ?? 'Description not available'}</Markdown>
+                </PluginReactContext.Provider>
+            </div>
+        </div>
+    </div>;
+}
+
+export class MVSStoriesSnapshotMarkdownViewer extends HTMLElement {
+    private model: MVSStoriesSnapshotMarkdownModel | undefined = undefined;
+
+    async connectedCallback() {
+        this.model = new MVSStoriesSnapshotMarkdownModel({
+            context: { name: this.getAttribute('context-name') ?? undefined },
+            viewerName: this.getAttribute('viewer-name') ?? undefined,
+        });
+        await this.model.mount(this);
+    }
+
+    disconnectedCallback() {
+        this.model?.dispose();
+        this.model = undefined;
+    }
+
+    constructor() {
+        super();
+    }
+}
+
+window.customElements.define('mvs-stories-snapshot-markdown', MVSStoriesSnapshotMarkdownViewer);
+
+
+================================================
+FILE: src/apps/mvs-stories/elements/viewer.tsx
+================================================
+/**
+ * Copyright (c) 2025 mol* contributors, licensed under MIT, See LICENSE file for more info.
+ *
+ * @author David Sehnal <david.sehnal@gmail.com>
+ */
+
+import { MolViewSpec } from '../../../extensions/mvs/behavior';
+import { loadMVSData } from '../../../extensions/mvs/components/formats';
+import { MVSData } from '../../../extensions/mvs/mvs-data';
+import { StringLike } from '../../../mol-io/common/string-like';
+import { PluginComponent } from '../../../mol-plugin-state/component';
+import { createPluginUI } from '../../../mol-plugin-ui';
+import { renderReact18 } from '../../../mol-plugin-ui/react18';
+import { DefaultPluginUISpec } from '../../../mol-plugin-ui/spec';
+import { PluginCommands } from '../../../mol-plugin/commands';
+import { PluginConfig } from '../../../mol-plugin/config';
+import { PluginContext } from '../../../mol-plugin/context';
+import { PluginSpec } from '../../../mol-plugin/spec';
+import { getMVSStoriesContext, MVSStoriesContext } from '../context';
+
+export class MVSStoriesViewerModel extends PluginComponent {
+    readonly context: MVSStoriesContext;
+    plugin?: PluginContext = undefined;
+
+    async mount(root: HTMLElement) {
+        const spec = DefaultPluginUISpec();
+        this.plugin = await createPluginUI({
+            target: root,
+            render: renderReact18,
+            spec: {
+                ...spec,
+                layout: {
+                    initial: {
+                        isExpanded: false,
+                        showControls: false,
+                        controlsDisplay: 'landscape',
+                    },
+                },
+                components: {
+                    remoteState: 'none',
+                    viewport: {
+                        snapshotDescription: EmptyDescription,
+                    }
+                },
+                behaviors: [
+                    ...spec.behaviors,
+                    PluginSpec.Behavior(MolViewSpec)
+                ],
+                config: [
+                    [PluginConfig.Viewport.ShowAnimation, false],
+                ]
+            }
+        });
+
+        this.subscribe(this.context.commands, async (cmd) => {
+            if (!cmd || !this.plugin) return;
+
+            try {
+                this.context.state.isLoading.next(true);
+                if (cmd.kind === 'load-mvs') {
+                    let loadedData: MVSData | StringLike | Uint8Array | undefined;
+                    if (cmd.url) {
+                        const data = await this.plugin.runTask(this.plugin.fetch({ url: cmd.url, type: cmd.format === 'mvsx' ? 'binary' : 'string' }));
+                        loadedData = await loadMVSData(this.plugin, data, cmd.format ?? 'mvsj', { sourceUrl: cmd.url });
+                    } else if (cmd.data) {
+                        loadedData = await loadMVSData(this.plugin, cmd.data, cmd.format ?? 'mvsj');
+                    }
+                    if (StringLike.is(loadedData) || loadedData instanceof Uint8Array) {
+                        this.context.state.currentStoryData.next(loadedData as string | Uint8Array);
+                    } else if (loadedData) {
+                        this.context.state.currentStoryData.next(JSON.stringify(loadedData));
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+                PluginCommands.Toast.Show(
+                    this.plugin,
+                    { key: '<mvsload>', title: 'Error', message: e?.message ? `${e?.message}` : `${e}`, timeoutMs: 10000 }
+                );
+            } finally {
+                this.context.state.isLoading.next(false);
+            }
+        });
+
+        const viewers = this.context.state.viewers.value;
+        const next = [...viewers, { name: this.options?.name, model: this }];
+        this.context.state.viewers.next(next);
+    }
+
+    constructor(private options?: { context?: { name?: string, container?: object }, name?: string }) {
+        super();
+
+        this.context = getMVSStoriesContext(options?.context);
+
+        const viewers = this.context.state.viewers.value;
+        const index = viewers.findIndex(v => v.name === options?.name);
+        if (index >= 0) {
+            const next = [...viewers];
+            next[index].model.dispose();
+            next.splice(index, 0);
+            this.context.state.viewers.next(next);
+        }
+    }
+}
+
+function EmptyDescription() {
+    return <></>;
+}
+
+export class MVSStoriesViewer extends HTMLElement {
+    private model: MVSStoriesViewerModel | undefined = undefined;
+
+    async connectedCallback() {
+        this.model = new MVSStoriesViewerModel({
+            name: this.getAttribute('name') ?? undefined,
+            context: { name: this.getAttribute('context-name') ?? undefined },
+        });
+        await this.model.mount(this);
+    }
+
+    disconnectedCallback() {
+        this.model?.dispose();
+        this.model = undefined;
+    }
+
+    constructor() {
+        super();
+    }
+}
+
+window.customElements.define('mvs-stories-viewer', MVSStoriesViewer);
+

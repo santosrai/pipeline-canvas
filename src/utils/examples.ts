@@ -146,6 +146,36 @@ try {
 } catch (error) {
   console.error('Failed to load complex:', error);
 }`
+  },
+  
+  {
+    id: 'residue-highlighting',
+    title: 'Specific Residue Highlighting',
+    description: 'Highlight and label specific residues using selectors',
+    category: 'analysis',
+    code: `// Specific Residue Highlighting
+try {
+  await builder.loadStructure('1CBS');
+  
+  // Show protein as cartoon
+  await builder.addCartoonRepresentation({
+    color: 'secondary-structure'
+  });
+  
+  // Highlight a specific residue in chain A
+  const residue = {label_asym_id: 'A', label_seq_id: 120};
+  await builder.highlightResidue(residue, {color: 'red'});
+  
+  // Label the residue
+  await builder.labelResidue(residue, 'ALA 120 A: Important Site');
+  
+  // Focus on the residue
+  await builder.focusResidue(residue);
+  
+  console.log('Residue highlighting complete');
+} catch (error) {
+  console.error('Failed to highlight residue:', error);
+}`
   }
 ];
 

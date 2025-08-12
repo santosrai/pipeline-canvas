@@ -4,6 +4,8 @@ import { createPluginUI } from 'molstar/lib/mol-plugin-ui';
 import { DefaultPluginUISpec } from 'molstar/lib/mol-plugin-ui/spec';
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { renderReact18 } from 'molstar/lib/mol-plugin-ui/react18';
+import { PluginSpec } from 'molstar/lib/mol-plugin/spec';
+import { MolViewSpec } from 'molstar/lib/extensions/mvs/behavior';
 import { Camera, FullscreenIcon, RotateCw } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import { StructureElement, StructureProperties } from 'molstar/lib/mol-model/structure';
@@ -29,10 +31,17 @@ export const MolstarViewer: React.FC = () => {
         console.log('[Molstar] initViewer: start');
         console.log('[Molstar] initViewer: containerRef set?', !!containerRef.current);
 
+        const spec = DefaultPluginUISpec();
         const pluginInstance = await createPluginUI({
           target: containerRef.current,
           render: renderReact18,
-          spec: DefaultPluginUISpec(),
+          spec: {
+            ...spec,
+            behaviors: [
+              ...spec.behaviors,
+              PluginSpec.Behavior(MolViewSpec)
+            ]
+          },
         });
         console.log('[Molstar] createPluginUI: success');
 

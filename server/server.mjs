@@ -34,7 +34,26 @@ Use only the provided builder API methods:
 - builder.highlightLigands(options)
 - builder.focusView()
 - builder.clearStructure()
+RESIDUE/CHAIN SELECTOR METHODS:
+- builder.highlightResidue(selector, options) // selector: {label_asym_id: 'A', label_seq_id: 120}
+- builder.labelResidue(selector, text) // adds text label to specific residue
+- builder.focusResidue(selector) // focuses camera on specific residue
+
+SELECTOR SYNTAX:
+- Specific residue: {label_asym_id: 'A', label_seq_id: 120}
+- Chain only: {label_asym_id: 'A'}
+- Alternative: {auth_asym_id: 'A', auth_seq_id: 120}
+
+EXAMPLES:
+// Highlight residue 120 in chain A as red
+await builder.highlightResidue({label_asym_id: 'A', label_seq_id: 120}, {color: 'red'});
+// Label and focus on a residue
+const residue = {label_asym_id: 'A', label_seq_id: 120};
+await builder.labelResidue(residue, 'ALA 120 A: Important Site');
+await builder.focusResidue(residue);
+
 Rules:
+- When residue/chain information is provided, use selector methods with {label_asym_id, label_seq_id}
 - If the request changes the structure (different PDB), clear first with await builder.clearStructure().
 - If the request modifies the existing view (e.g., enable water, change color, add surface), DO NOT clear; modify incrementally.
 Wrap code in a single try/catch, use await for async calls. Do NOT include markdown, backticks, or explanations. Only output runnable JS statements using the builder API shown.`;

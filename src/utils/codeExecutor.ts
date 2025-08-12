@@ -1,6 +1,8 @@
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { createMolstarBuilder, MolstarBuilder } from './molstarBuilder';
 import { useAppStore } from '../stores/appStore';
+import { createMVSBuilder } from 'molstar/lib/extensions/mvs/tree/mvs/mvs-builder';
+import { loadMVS } from 'molstar/lib/extensions/mvs/load';
 
 // Cache a single builder per plugin instance so that the currentStructure
 // is preserved across multiple executions (e.g., when AI code modifies
@@ -66,10 +68,13 @@ export class CodeExecutor {
   }
 
   private createSandbox() {
+    
     return {
       // Molstar builder API
       builder: this.builder,
       plugin: this.plugin,
+      // MolViewSpec fluent builder API
+      mvs: this.createMVSWrapper(),
       
       // Safe console
       console: {
@@ -90,6 +95,42 @@ export class CodeExecutor {
       fetch: undefined,
       XMLHttpRequest: undefined,
     };
+  }
+
+  private createMVSBuilder() {
+    try {
+      console.log('[MVS] Creating MolViewSpec builder...');
+      const mvsBuilder = createMVSBuilder();
+      console.log('[MVS] MolViewSpec builder created successfully');
+      return mvsBuilder;
+    } catch (e) {
+      console.error('[MVS] Failed to create MolViewSpec builder:', e);
+      return undefined;
+    }
+  }
+
+  private createMVSWrapper() {
+    const mvsBuilder = this.createMVSBuilder();
+    if (!mvsBuilder) return undefined;
+
+    // Create a wrapper that has all the MVS builder methods plus an apply method
+    const wrapper = Object.create(mvsBuilder);
+    
+    // Add apply method to execute the MVS specification
+    wrapper.apply = async () => {
+      try {
+        console.log('[MVS] Applying MolViewSpec to plugin...');
+        const mvsState = mvsBuilder.getState();
+        console.log('[MVS] MVS State:', mvsState);
+        await loadMVS(this.plugin, mvsState);
+        console.log('[MVS] MolViewSpec applied successfully!');
+      } catch (e) {
+        console.error('[MVS] Failed to apply MolViewSpec:', e);
+        throw e;
+      }
+    };
+
+    return wrapper;
   }
 
   private async executeWithTimeout(
