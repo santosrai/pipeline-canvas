@@ -38,14 +38,18 @@ class SimpleRouterGraph:
         # Rule-based shortcut: selection present + interrogative → bio-chat
         input_text: str = state.get("input", "") or ""
         selection = state.get("selection")
+        selections = state.get("selections", [])
+        # Use selections array if available, otherwise fall back to single selection
+        has_selection = (selections and len(selections) > 0) or selection
+        
         interrogatives = [
-            "what is this", "what's this", "what am i looking at", "this residue", "selected", "identify", "which residue",
+            "what is this", "what's this", "what am i looking at", "this residue", "selected", "identify", "which residue", "these residues", "what are these",
         ]
         low = input_text.lower()
         # UniProt search rule
         if "uniprot" in low and ("search" in low or "find" in low):
             return {"routedAgentId": "uniprot-search", "reason": "rule:uniprot-search"}
-        if selection and any(k in low for k in interrogatives):
+        if has_selection and any(k in low for k in interrogatives):
             return {"routedAgentId": "bio-chat", "reason": "rule:selection+question"}
 
         # Semantic routing: input against agent vectors

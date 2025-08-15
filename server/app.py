@@ -73,6 +73,7 @@ async def invoke(request: Request):
             current_code=body.get("currentCode"),
             history=body.get("history"),
             selection=body.get("selection"),
+            selections=body.get("selections"),
         )
         return {"agentId": agent_id, **res}
     except Exception as e:
@@ -97,6 +98,7 @@ async def route(request: Request):
             {
                 "input": input_text,
                 "selection": body.get("selection"),
+                "selections": body.get("selections"),
                 "currentCode": body.get("currentCode"),
                 "history": body.get("history"),
             }
@@ -111,6 +113,7 @@ async def route(request: Request):
             current_code=body.get("currentCode"),
             history=body.get("history"),
             selection=body.get("selection"),
+            selections=body.get("selections"),
         )
         return {"agentId": agent_id, **res, "reason": routed.get("reason")}
     except Exception as e:

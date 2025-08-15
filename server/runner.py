@@ -29,6 +29,7 @@ async def run_agent(
     current_code: Optional[str],
     history: Optional[List[Dict[str, Any]]],
     selection: Optional[Dict[str, Any]],
+    selections: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     model = os.getenv(agent.get("modelEnv", "")) or agent.get("defaultModel")
     base_log = {"model": model, "agentId": agent.get("id")}
@@ -125,23 +126,48 @@ async def run_agent(
 
     # Text agent
     selection_lines = []
-    if selection:
-        selection_lines.append(f"- PDB: {selection.get('pdbId') or 'unknown'}")
-        selection_lines.append(f"- Kind: {selection.get('kind')}")
-        selection_lines.append(f"- Residue: {selection.get('compId') or '?'}")
-        selection_lines.append(f"- label_seq_id: {selection.get('labelSeqId') if selection.get('labelSeqId') is not None else 'null'}")
-        selection_lines.append(f"- auth_seq_id: {selection.get('authSeqId') if selection.get('authSeqId') is not None else 'null'}")
-        selection_lines.append(f"- insCode: {selection.get('insCode') if selection.get('insCode') is not None else 'null'}")
-        selection_lines.append(f"- label_asym_id: {selection.get('labelAsymId') or 'null'}")
-        selection_lines.append(f"- auth_asym_id: {selection.get('authAsymId') or 'null'}")
-        mutation = (selection or {}).get("mutation") or {}
-        if mutation.get("toCompId"):
-            selection_lines.append(
-                f"- ProposedMutation: {selection.get('compId') or '?'}{selection.get('authSeqId') or '?'}{selection.get('authAsymId') or ''} -> {mutation.get('toCompId')}"
-            )
+    
+    # Extract PDB ID from current code if available
+    code_pdb_id = None
+    if current_code and str(current_code).strip():
+        import re
+        # Look for loadStructure calls with PDB ID
+        pdb_match = re.search(r"loadStructure\s*\(\s*['\"]([0-9A-Za-z]{4})['\"]", str(current_code))
+        if pdb_match:
+            code_pdb_id = pdb_match.group(1).upper()
+    
+    # Handle multiple selections if provided, otherwise fall back to single selection
+    active_selections = selections if selections and len(selections) > 0 else ([selection] if selection else [])
+    
+    if active_selections:
+        # Always treat as multiple selections to provide comprehensive info
+        # Use the new multiple selection format even for single selections
+        selection_lines.append(f"SelectedResiduesContext ({len(active_selections)} residue{'s' if len(active_selections) != 1 else ''}):")
+        
+        for i, sel in enumerate(active_selections):
+            chain = sel.get('labelAsymId') or sel.get('authAsymId') or '?'
+            seq_id = sel.get('labelSeqId') if sel.get('labelSeqId') is not None else sel.get('authSeqId')
+            comp_id = sel.get('compId') or '?'
+            # Use PDB ID from selection, or fall back to code context
+            pdb_id = sel.get('pdbId') or code_pdb_id or 'unknown'
+            
+            # Provide detailed info for each residue
+            selection_lines.append(f"  {i+1}. {comp_id}{seq_id} (Chain {chain}) in PDB {pdb_id}")
+            selection_lines.append(f"     - Residue Type: {comp_id}")
+            selection_lines.append(f"     - Position: {seq_id}")
+            selection_lines.append(f"     - Chain: {chain}")
+            selection_lines.append(f"     - PDB Structure: {pdb_id}")
+            if sel.get('insCode'):
+                selection_lines.append(f"     - Insertion Code: {sel.get('insCode')}")
+        
+        if len(active_selections) > 1:
+            selection_lines.append(f"Note: User has selected {len(active_selections)} residues for analysis or comparison.")
+        else:
+            selection_lines.append("Note: User has selected this specific residue for analysis.")
     selection_context = "Context:\n" + "\n".join(selection_lines) if selection_lines else ""
+    
     code_context = (
-        "Additional code context (may indicate PDB via builder.loadStructure):\n" + str(current_code)[:3000]
+        f"CodeContext (Current PDB: {code_pdb_id or 'unknown'}):\n" + str(current_code)[:3000]
         if current_code and str(current_code).strip()
         else ""
     )
