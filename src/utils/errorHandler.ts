@@ -1,5 +1,5 @@
 /**
- * Comprehensive Error Handling System for AlphaFold Integration
+ * Comprehensive Error Handling System for AlphaFold & RFdiffusion Integration
  * Provides user-friendly error messages with detailed technical information
  */
 
@@ -498,5 +498,289 @@ export class AlphaFoldErrorHandler {
       case ErrorSeverity.CRITICAL: return '💥';
       default: return 'ℹ️';
     }
+  }
+}
+
+export class RFdiffusionErrorHandler {
+  private static errorCatalog: Record<string, Partial<ErrorDetails>> = {
+    // Validation Errors
+    'CONTIGS_EMPTY': {
+      category: ErrorCategory.VALIDATION,
+      severity: ErrorSeverity.MEDIUM,
+      userMessage: 'Contigs specification is required',
+      technicalMessage: 'Contigs parameter cannot be empty for protein design',
+      suggestions: [
+        {
+          action: 'Specify contigs',
+          description: 'Enter a valid contigs specification like "A50-150" or "A20-60/0 50-100"',
+          type: 'fix',
+          priority: 1
+        },
+        {
+          action: 'Use default',
+          description: 'Use default unconditional design contigs',
+          type: 'alternative',
+          priority: 2
+        }
+      ]
+    },
+
+    'CONTIGS_INVALID': {
+      category: ErrorCategory.VALIDATION,
+      severity: ErrorSeverity.MEDIUM,
+      userMessage: 'Invalid contigs format',
+      technicalMessage: 'Contigs specification does not match expected format',
+      suggestions: [
+        {
+          action: 'Fix format',
+          description: 'Use formats like "A50-150", "A20-60/0 50-100", or "100-200"',
+          type: 'fix',
+          priority: 1
+        },
+        {
+          action: 'Check examples',
+          description: 'Review contigs format examples in the documentation',
+          type: 'fix',
+          priority: 2
+        }
+      ]
+    },
+
+    'DIFFUSION_STEPS_INVALID': {
+      category: ErrorCategory.VALIDATION,
+      severity: ErrorSeverity.MEDIUM,
+      userMessage: 'Invalid diffusion steps value',
+      technicalMessage: 'Diffusion steps must be between 1 and 100',
+      suggestions: [
+        {
+          action: 'Use valid range',
+          description: 'Enter a number between 1 and 100 for diffusion steps',
+          type: 'fix',
+          priority: 1
+        },
+        {
+          action: 'Use preset',
+          description: 'Choose a complexity preset (Simple=10, Medium=15, Complex=25)',
+          type: 'alternative',
+          priority: 2
+        }
+      ]
+    },
+
+    'PDB_INVALID': {
+      category: ErrorCategory.VALIDATION,
+      severity: ErrorSeverity.MEDIUM,
+      userMessage: 'Invalid PDB structure',
+      technicalMessage: 'Provided PDB content or ID is not valid for design',
+      suggestions: [
+        {
+          action: 'Check PDB ID',
+          description: 'Ensure PDB ID is 4 characters (e.g., 1R42)',
+          type: 'fix',
+          priority: 1
+        },
+        {
+          action: 'Validate PDB content',
+          description: 'Ensure PDB contains ATOM records',
+          type: 'fix',
+          priority: 2
+        }
+      ]
+    },
+
+    // API Errors
+    'RFDIFFUSION_API_NOT_CONFIGURED': {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.HIGH,
+      userMessage: 'RFdiffusion service not available',
+      technicalMessage: 'NVIDIA API key not configured for RFdiffusion',
+      suggestions: [
+        {
+          action: 'Contact administrator',
+          description: 'Request NVIDIA API key configuration',
+          type: 'contact',
+          priority: 1
+        }
+      ]
+    },
+
+    'DESIGN_FAILED': {
+      category: ErrorCategory.PROCESSING,
+      severity: ErrorSeverity.HIGH,
+      userMessage: 'Protein design failed',
+      technicalMessage: 'RFdiffusion computation could not complete',
+      suggestions: [
+        {
+          action: 'Try different parameters',
+          description: 'Adjust diffusion steps, contigs, or design mode',
+          type: 'alternative',
+          priority: 1
+        },
+        {
+          action: 'Simplify design',
+          description: 'Use fewer diffusion steps or simpler contigs',
+          type: 'fix',
+          priority: 2
+        },
+        {
+          action: 'Retry with relaxation',
+          description: 'Enable energy minimization for better results',
+          type: 'retry',
+          priority: 3
+        }
+      ]
+    },
+
+    'DESIGN_TIMEOUT': {
+      category: ErrorCategory.TIMEOUT,
+      severity: ErrorSeverity.MEDIUM,
+      userMessage: 'Design process timed out',
+      technicalMessage: 'RFdiffusion request exceeded maximum processing time',
+      suggestions: [
+        {
+          action: 'Reduce complexity',
+          description: 'Use fewer diffusion steps for faster processing',
+          type: 'fix',
+          priority: 1
+        },
+        {
+          action: 'Try again later',
+          description: 'Server may be experiencing high load',
+          type: 'retry',
+          priority: 2
+        }
+      ]
+    },
+
+    'HOTSPOTS_INVALID': {
+      category: ErrorCategory.VALIDATION,
+      severity: ErrorSeverity.MEDIUM,
+      userMessage: 'Invalid hotspot residues',
+      technicalMessage: 'Hotspot residue specification is malformed',
+      suggestions: [
+        {
+          action: 'Fix format',
+          description: 'Use format like "A50, A51, A52" for hotspot residues',
+          type: 'fix',
+          priority: 1
+        },
+        {
+          action: 'Remove hotspots',
+          description: 'Design without hotspot constraints',
+          type: 'alternative',
+          priority: 2
+        }
+      ]
+    },
+
+    'TEMPLATE_NOT_FOUND': {
+      category: ErrorCategory.VALIDATION,
+      severity: ErrorSeverity.MEDIUM,
+      userMessage: 'Template structure not found',
+      technicalMessage: 'Specified PDB template could not be retrieved',
+      suggestions: [
+        {
+          action: 'Check PDB ID',
+          description: 'Verify the PDB ID exists and is accessible',
+          type: 'fix',
+          priority: 1
+        },
+        {
+          action: 'Use unconditional design',
+          description: 'Design without a template structure',
+          type: 'alternative',
+          priority: 2
+        }
+      ]
+    }
+  };
+
+  static createError(
+    code: string, 
+    context: Record<string, any> = {},
+    technicalDetails?: string,
+    stack?: string,
+    requestId?: string
+  ): ErrorDetails {
+    const template = this.errorCatalog[code];
+    
+    if (!template) {
+      // Fallback for unknown errors
+      return {
+        code: 'UNKNOWN_ERROR',
+        category: ErrorCategory.SYSTEM,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'An unexpected error occurred',
+        technicalMessage: technicalDetails || 'Unknown error occurred during protein design',
+        context,
+        suggestions: [
+          {
+            action: 'Try again',
+            description: 'The error might be temporary',
+            type: 'retry',
+            priority: 1
+          },
+          {
+            action: 'Contact support',
+            description: 'Report this issue with the error details',
+            type: 'contact',
+            priority: 2
+          }
+        ],
+        timestamp: new Date(),
+        requestId,
+        stack
+      };
+    }
+
+    return {
+      code,
+      category: template.category!,
+      severity: template.severity!,
+      userMessage: template.userMessage!,
+      technicalMessage: technicalDetails || template.technicalMessage!,
+      context,
+      suggestions: template.suggestions!,
+      timestamp: new Date(),
+      requestId,
+      stack
+    };
+  }
+
+  static createValidationError(message: string, context: Record<string, any> = {}): ErrorDetails {
+    return this.createError('VALIDATION_GENERIC', context, message);
+  }
+
+  static createNetworkError(message: string, context: Record<string, any> = {}): ErrorDetails {
+    return this.createError('NETWORK_ERROR', context, message);
+  }
+
+  static handleError(error: any, context: Record<string, any> = {}): ErrorDetails {
+    if (error?.code && this.errorCatalog[error.code]) {
+      return this.createError(error.code, { ...context, originalError: error }, error.message);
+    }
+
+    // Try to categorize unknown errors
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    const lowerMessage = errorMessage.toLowerCase();
+
+    if (lowerMessage.includes('network') || lowerMessage.includes('connection')) {
+      return this.createNetworkError(errorMessage, context);
+    }
+
+    if (lowerMessage.includes('timeout')) {
+      return this.createError('DESIGN_TIMEOUT', context, errorMessage);
+    }
+
+    if (lowerMessage.includes('api key') || lowerMessage.includes('unauthorized')) {
+      return this.createError('RFDIFFUSION_API_NOT_CONFIGURED', context, errorMessage);
+    }
+
+    if (lowerMessage.includes('contigs')) {
+      return this.createError('CONTIGS_INVALID', context, errorMessage);
+    }
+
+    // Generic error fallback
+    return this.createError('UNKNOWN_ERROR', context, errorMessage, error?.stack);
   }
 }

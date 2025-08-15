@@ -103,11 +103,44 @@ A molecular visualization application integrating MolStar viewer with AI-powered
 - `fold residues 100-200 from chain A` → Fold subsequence
 - `fold MVLSEGEWQL...` → Fold user-provided sequence
 
+### RFdiffusion Integration Details:
+**Branch**: `feature/rf-diffusion`
+
+**New Components Added**:
+- `RFdiffusionDialog.tsx`: User interface for protein design parameter configuration
+- `rfdiffusion_client.py`: NVIDIA NIMS API client for RFdiffusion protein design
+- `rfdiffusion_handler.py`: Server-side request processing and job management
+- `RFdiffusionErrorHandler`: Comprehensive error handling for design workflows
+
+**Agent System**:
+- New `rfdiffusion-agent` added to routing system
+- Detects design keywords: "design", "create", "generate", "scaffold", "rfdiffusion"
+- Smart parameter parsing from natural language requests
+- Design modes: unconditional, motif scaffolding, partial diffusion
+
+**API Endpoints**:
+- `POST /api/rfdiffusion/design`: Submit design requests
+- `GET /api/rfdiffusion/status/:jobId`: Check job progress
+- `POST /api/rfdiffusion/cancel/:jobId`: Cancel running jobs
+
+**Features**:
+- **Smart Input Processing**: Handles "design protein", "create 100-150 residue protein", "scaffold around hotspots"
+- **Design Modes**: Unconditional design, motif scaffolding, partial diffusion
+- **Parameter Customization**: Contigs specification, hotspot residues, diffusion steps
+- **Template Support**: Use existing PDB structures as templates
+- **Result Integration**: Direct PDB download and MolStar viewer loading
+
+**Usage Examples**:
+- `design a protein` → Unconditional design with default parameters
+- `design protein using PDB:1R42` → Motif scaffolding with template
+- `create 100-150 residue protein` → Length-specific design
+- `scaffold around hotspots A50,A51,A52` → Hotspot preservation design
+
 ### Enhanced Error Handling System:
 **New Components Added**:
 - `ErrorDisplay.tsx`: Rich error presentation with expandable details
 - `ErrorDashboard.tsx`: Comprehensive error monitoring and analytics dashboard
-- `errorHandler.ts`: Structured error classification and user-friendly messaging
+- `errorHandler.ts`: Structured error classification and user-friendly messaging (AlphaFold & RFdiffusion)
 - `errorLogger.ts`: Advanced error logging, metrics, and monitoring
 
 **Error Architecture Features**:

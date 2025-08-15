@@ -6,9 +6,10 @@ import { CodeExecutor } from '../utils/codeExecutor';
 import { api } from '../utils/api';
 import { v4 as uuidv4 } from 'uuid';
 import { AlphaFoldDialog } from './AlphaFoldDialog';
+import { RFdiffusionDialog } from './RFdiffusionDialog';
 import { ProgressTracker, useAlphaFoldProgress } from './ProgressTracker';
 import { ErrorDisplay } from './ErrorDisplay';
-import { ErrorDetails, AlphaFoldErrorHandler } from '../utils/errorHandler';
+import { ErrorDetails, AlphaFoldErrorHandler, RFdiffusionErrorHandler } from '../utils/errorHandler';
 import { logAlphaFoldError } from '../utils/errorLogger';
 
 // Enhanced Message interface for AlphaFold support
@@ -52,6 +53,10 @@ export const ChatPanel: React.FC = () => {
   const [showAlphaFoldDialog, setShowAlphaFoldDialog] = useState(false);
   const [alphafoldData, setAlphafoldData] = useState<any>(null);
   const progressTracker = useAlphaFoldProgress();
+
+  // RFdiffusion state
+  const [showRFdiffusionDialog, setShowRFdiffusionDialog] = useState(false);
+  const [rfdiffusionData, setRfdiffusionData] = useState<any>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -335,6 +340,76 @@ try {
     }
   };
 
+  // RFdiffusion handling functions
+  const handleRFdiffusionConfirm = async (parameters: any) => {
+    setShowRFdiffusionDialog(false);
+    
+    const jobId = `rf_${Date.now()}`;
+    
+    try {
+      const response = await api.post('/rfdiffusion/design', {
+        parameters,
+        jobId
+      });
+
+      if (response.data.status === 'success') {
+        const result = response.data.data;
+        
+        // Add result message to chat
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: `RFdiffusion protein design completed successfully! The designed structure is ready for download and visualization.`,
+          type: 'ai',
+          timestamp: new Date(),
+          alphafoldResult: { // Reuse the same result format for display
+            pdbContent: result.pdbContent,
+            filename: result.filename || `designed_${Date.now()}.pdb`,
+            parameters,
+            metadata: result.metadata
+          }
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+      } else {
+        // Handle API error response
+        const apiError = RFdiffusionErrorHandler.handleError(response.data, {
+          jobId,
+          parameters,
+          feature: 'RFdiffusion'
+        });
+        
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: apiError.userMessage,
+          type: 'ai',
+          timestamp: new Date(),
+          error: apiError
+        };
+        
+        setMessages(prev => [...prev, errorMessage]);
+      }
+    } catch (error: any) {
+      console.error('RFdiffusion request failed:', error);
+      
+      // Handle different types of errors
+      const structuredError = RFdiffusionErrorHandler.handleError(error, {
+        jobId,
+        parameters,
+        feature: 'RFdiffusion'
+      });
+      
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: structuredError.userMessage,
+        type: 'ai',
+        timestamp: new Date(),
+        error: structuredError
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+    }
+  };
+
   const handleAlphaFoldResponse = (responseData: any) => {
     try {
       // Log the raw response for debugging
@@ -355,6 +430,13 @@ try {
         
         setAlphafoldData(data);
         setShowAlphaFoldDialog(true);
+        return true; // Handled
+      }
+
+      if (data.action === 'confirm_design') {
+        console.log('[RFdiffusion] Design confirmation detected');
+        setRfdiffusionData(data);
+        setShowRFdiffusionDialog(true);
         return true; // Handled
       }
     } catch (e) {
@@ -470,6 +552,38 @@ try {
                 },
                 estimated_time: '2-5 minutes',
                 message: 'Ready to fold protein. Please confirm parameters.'
+              };
+              
+              // Handle the fallback data
+              handleAlphaFoldResponse(JSON.stringify(fallbackData));
+              return;
+            }
+          }
+
+          // Check if this is an RFdiffusion response
+          if (agentId === 'rfdiffusion-agent') {
+            if (handleAlphaFoldResponse(aiText)) {
+              return; // RFdiffusion dialog will be shown
+            } else {
+              // Fallback: if JSON parsing failed, try to extract key info and show a basic dialog
+              console.log('[RFdiffusion] Fallback: attempting to parse non-JSON response');
+              const fallbackData = {
+                action: 'confirm_design',
+                parameters: {
+                  design_mode: 'unconditional',
+                  contigs: 'A50-150',
+                  hotspot_res: [],
+                  diffusion_steps: 15
+                },
+                design_info: {
+                  mode: 'unconditional',
+                  template: 'No template structure',
+                  contigs: 'A50-150',
+                  hotspots: 0,
+                  complexity: 'medium'
+                },
+                estimated_time: '3-8 minutes',
+                message: 'Ready to design a new protein structure. Please confirm parameters.'
               };
               
               // Handle the fallback data
@@ -721,6 +835,14 @@ try {
         onClose={() => setShowAlphaFoldDialog(false)}
         onConfirm={handleAlphaFoldConfirm}
         initialData={alphafoldData}
+      />
+
+      {/* RFdiffusion Dialog */}
+      <RFdiffusionDialog
+        isOpen={showRFdiffusionDialog}
+        onClose={() => setShowRFdiffusionDialog(false)}
+        onConfirm={handleRFdiffusionConfirm}
+        initialData={rfdiffusionData}
       />
     </div>
   );
