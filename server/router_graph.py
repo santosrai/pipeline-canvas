@@ -57,6 +57,11 @@ class SimpleRouterGraph:
         if "uniprot" in low and ("search" in low or "find" in low):
             return {"routedAgentId": "uniprot-search", "reason": "rule:uniprot-search"}
         
+        # AlphaFold folding/docking rule
+        alphafold_keywords = ["fold", "dock", "predict structure", "alphafold", "structure prediction", "fold protein", "dock protein", "predict fold"]
+        if any(k in low for k in alphafold_keywords):
+            return {"routedAgentId": "alphafold-agent", "reason": "rule:alphafold-folding"}
+        
         # Bio-chat for selection questions, BUT NOT if explicit visualization command
         if has_selection and any(k in low for k in interrogatives) and not has_viz_command:
             return {"routedAgentId": "bio-chat", "reason": "rule:selection+question"}

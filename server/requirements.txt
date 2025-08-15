@@ -7,3 +7,5 @@ langchain-openai==0.2.3
 openai>=1.52.0,<2.0.0
 httpx==0.27.2
 pinecone>=5.0.0
+requests>=2.31.0
+aiohttp>=3.9.0

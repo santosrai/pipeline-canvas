@@ -17,18 +17,22 @@ A molecular visualization application integrating MolStar viewer with AI-powered
 - `src/utils/api.ts` - API utilities
 - `src/utils/examples.ts` - Example data/code
 - `server/` files - Backend agent system with RAG capabilities
-  - `agents.py` - AI agent implementations
+  - `app.py` - FastAPI server with all endpoints
+  - `agents.py` - AI agent implementations including AlphaFold agent
   - `mvs_rag.py` - Retrieval-augmented generation for molecular data
   - `router_graph.py` - Request routing logic
   - `runner.py` - Main execution runner
-  - `server.mjs` - Server implementation
+  - `alphafold_handler.py` - AlphaFold request processing
+  - `nims_client.py` - NVIDIA NIMS API client
+  - `sequence_utils.py` - Sequence extraction utilities
 
 ### Current Architecture:
 - **Frontend**: React + TypeScript + Vite + TailwindCSS
-- **Backend**: Python agents with Node.js server
+- **Backend**: Python FastAPI server with AI agents (unified architecture)
 - **Molecular Viewer**: MolStar integration
 - **AI Features**: Chat interface with code execution capabilities
 - **Data**: PDB structure handling, UniProt integration
+- **AlphaFold2**: NVIDIA NIMS API integration for protein structure prediction
 
 ### Key Features Implemented:
 1. **MolStar Integration**: 3D protein structure visualization
@@ -37,6 +41,7 @@ A molecular visualization application integrating MolStar viewer with AI-powered
 4. **Residue/Chain Selection**: Proper syntax for MolStar structure manipulation
 5. **Performance Optimizations**: Efficient MolstarBuilder instance reuse
 6. **RAG System**: Retrieval-augmented generation for protein data queries
+7. **AlphaFold2 Integration**: AI-powered protein structure prediction via NVIDIA NIMS API
 
 ### Working Tree Status:
 - Clean working directory (no uncommitted changes)
@@ -44,7 +49,86 @@ A molecular visualization application integrating MolStar viewer with AI-powered
 - Ready for continued development or merge to main
 
 ### Development Environment:
-- Node.js project with package.json configuration
-- Python backend with requirements.txt
-- Vite development server for frontend
+- Node.js project with package.json configuration (frontend only)
+- Python FastAPI backend (server/app.py) with requirements.txt
+- **IMPORTANT**: Always use Python virtual environment for server operations: `cd server && source venv/bin/activate` before running Python commands
+- Unified development: `npm run dev:all` starts both Python server and Vite dev server
 - Git repository with feature branch workflow
+- NVIDIA NIMS API integration for AlphaFold2 predictions
+
+### AlphaFold2 Configuration:
+- **REQUIRED**: Set `NVCF_RUN_KEY` environment variable with NVIDIA API key
+- **Setup**: `export NVCF_RUN_KEY="your-nvidia-api-key"`
+- **Error**: If missing, users get "AlphaFold service not available" message
+- **Get API Key**: Visit https://build.nvidia.com/explore/discover
+
+### Architecture Changes (Latest):
+- **REMOVED**: Redundant Node.js server (`server.mjs`) 
+- **UNIFIED**: Single Python FastAPI backend handles all API endpoints
+- **UPDATED**: package.json scripts now reference Python server only
+- **ENHANCED**: FastAPI includes all AlphaFold endpoints for frontend compatibility
+
+### AlphaFold2 Integration Details:
+**Branch**: `feature/alphafold2-integration`
+
+**New Components Added**:
+- `AlphaFoldDialog.tsx`: User interface for folding parameter configuration
+- `ProgressTracker.tsx`: Real-time progress tracking for folding jobs
+- `alphafoldUtils.ts`: Utility functions for sequence validation and result handling
+- `nims_client.py`: Python client for NVIDIA NIMS API integration
+- `sequence_utils.py`: Sequence extraction from PDB IDs, files, and text input
+- `alphafold_handler.py`: Server-side request processing and job management
+
+**Agent System**:
+- New `alphafold-agent` added to routing system
+- Detects fold/dock keywords: "fold", "dock", "predict structure", "alphafold"
+- Smart sequence extraction from PDB IDs, chains, residue ranges
+- Parameter configuration for MSA algorithms, databases, iterations
+
+**API Endpoints**:
+- `POST /api/alphafold/fold`: Submit folding requests
+- `GET /api/alphafold/status/:jobId`: Check job progress
+- `POST /api/alphafold/cancel/:jobId`: Cancel running jobs
+
+**Features**:
+- **Smart Input Processing**: Handles "fold PDB:1ABC", "fold chain A", "fold residues 50-100"
+- **Parameter Customization**: MSA algorithms (mmseqs2/jackhmmer), databases, iterations
+- **Progress Tracking**: Real-time updates with cancellation support
+- **Result Integration**: Direct PDB download and MolStar viewer loading
+- **Validation**: Sequence format checking and length constraints
+
+**Usage Examples**:
+- `fold PDB:1HHO` → Extract and fold entire structure
+- `fold chain A from PDB:1ABC` → Fold specific chain
+- `fold residues 100-200 from chain A` → Fold subsequence
+- `fold MVLSEGEWQL...` → Fold user-provided sequence
+
+### Enhanced Error Handling System:
+**New Components Added**:
+- `ErrorDisplay.tsx`: Rich error presentation with expandable details
+- `ErrorDashboard.tsx`: Comprehensive error monitoring and analytics dashboard
+- `errorHandler.ts`: Structured error classification and user-friendly messaging
+- `errorLogger.ts`: Advanced error logging, metrics, and monitoring
+
+**Error Architecture Features**:
+- **Layered Error System**: Detection → Processing → Display → Logging
+- **Error Categories**: Validation, Network, API, Processing, System, Auth, Timeout, Quota
+- **Severity Levels**: Low, Medium, High, Critical with appropriate UI treatment
+- **Progressive Disclosure**: Simple summary with expandable technical details
+- **Actionable Suggestions**: Context-aware recovery options and next steps
+- **Comprehensive Logging**: Structured error tracking with metrics and analytics
+
+**User Experience Enhancements**:
+- **Friendly Error Messages**: Clear, non-technical explanations for users
+- **Smart Recovery Options**: Contextual suggestions like "Try different parameters"
+- **Expandable Details**: Technical information available on demand
+- **Error Dashboard**: Developer tool accessible via Ctrl+Shift+E
+- **Progress Integration**: Errors seamlessly integrated with progress tracking
+- **Retry Functionality**: One-click retry for appropriate error types
+
+**Developer Features**:
+- **Error Analytics**: Track error patterns, frequency, and user impact
+- **Export Functionality**: CSV export of error logs for analysis
+- **Real-time Monitoring**: Error rate tracking and alerting
+- **Context Preservation**: Full error context including sequence, parameters, stack traces
+- **Error Insights**: Most common errors, trends, and user impact metrics

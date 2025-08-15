@@ -6,6 +6,7 @@ import { SettingsDialog } from './components/SettingsDialog';
 import { ChatHistoryPanel } from './components/ChatHistoryPanel';
 import { ChatHistorySidebar } from './components/ChatHistorySidebar';
 import { ResizablePanel } from './components/ResizablePanel';
+import { ErrorDashboard, useErrorDashboard } from './components/ErrorDashboard';
 import { Eye, Code2, Settings } from 'lucide-react';
 import { useAppStore } from './stores/appStore';
 import { useSettingsStore } from './stores/settingsStore';
@@ -16,6 +17,7 @@ function App() {
   const { activePane, setActivePane, chatPanelWidth, setChatPanelWidth } = useAppStore();
   const { settings, isSettingsDialogOpen, setSettingsDialogOpen } = useSettingsStore();
   const { isHistoryPanelOpen, setHistoryPanelOpen } = useChatHistoryStore();
+  const errorDashboard = useErrorDashboard();
   
   // Auto-switch to viewer when editor gets disabled
   useEffect(() => {
@@ -101,6 +103,12 @@ function App() {
       <ChatHistoryPanel 
         isOpen={isHistoryPanelOpen}
         onClose={() => setHistoryPanelOpen(false)}
+      />
+
+      {/* Error Dashboard (Ctrl+Shift+E to open) */}
+      <ErrorDashboard 
+        isOpen={errorDashboard.isOpen} 
+        onClose={errorDashboard.closeDashboard} 
       />
     </div>
   );

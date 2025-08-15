@@ -34,6 +34,32 @@ async def run_agent(
     model = os.getenv(agent.get("modelEnv", "")) or agent.get("defaultModel")
     base_log = {"model": model, "agentId": agent.get("id")}
 
+    # Special handling for AlphaFold agent - use handler instead of LLM
+    if agent.get("id") == "alphafold-agent":
+        try:
+            from .alphafold_handler import alphafold_handler
+            result = await alphafold_handler.process_folding_request(
+                user_text, 
+                context={
+                    "current_code": current_code,
+                    "history": history,
+                    "selection": selection
+                }
+            )
+            
+            if result.get("action") == "error":
+                log_line("agent:alphafold:error", {"error": result.get("error"), "userText": user_text})
+                return {"type": "text", "text": f"Error: {result.get('error')}"}
+            else:
+                # Convert handler result to JSON text for frontend processing
+                import json
+                log_line("agent:alphafold:success", {"userText": user_text, "hasSequence": bool(result.get("sequence"))})
+                return {"type": "text", "text": json.dumps(result)}
+                
+        except Exception as e:
+            log_line("agent:alphafold:failed", {"error": str(e), "userText": user_text})
+            return {"type": "text", "text": f"AlphaFold processing failed: {str(e)}"}
+
     # Deterministic UniProt search agent (no LLM call)
     if agent.get("id") == "uniprot-search":
         import re, json

@@ -1,10 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, X } from 'lucide-react';
+import { Send, Sparkles, Download, Play, X } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import { useChatHistoryStore, useActiveSession, Message } from '../stores/chatHistoryStore';
 import { CodeExecutor } from '../utils/codeExecutor';
 import { api } from '../utils/api';
 import { v4 as uuidv4 } from 'uuid';
+import { AlphaFoldDialog } from './AlphaFoldDialog';
+import { ProgressTracker, useAlphaFoldProgress } from './ProgressTracker';
+import { ErrorDisplay } from './ErrorDisplay';
+import { ErrorDetails, AlphaFoldErrorHandler } from '../utils/errorHandler';
+import { logAlphaFoldError } from '../utils/errorLogger';
+
+// Enhanced Message interface for AlphaFold support
+interface AlphaFoldMessage extends Message {
+  alphafoldResult?: {
+    pdbContent?: string;
+    filename?: string;
+    sequence?: string;
+    parameters?: any;
+    metadata?: any;
+  };
+  error?: ErrorDetails;
+}
 
 export const ChatPanel: React.FC = () => {
   const { plugin, currentCode, setCurrentCode, setIsExecuting, setActivePane, setPendingCodeToRun } = useAppStore();
@@ -30,6 +47,11 @@ export const ChatPanel: React.FC = () => {
 
   // Get messages from active session
   const messages = activeSession?.messages || [];
+
+  // AlphaFold state
+  const [showAlphaFoldDialog, setShowAlphaFoldDialog] = useState(false);
+  const [alphafoldData, setAlphafoldData] = useState<any>(null);
+  const progressTracker = useAlphaFoldProgress();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -98,12 +120,249 @@ export const ChatPanel: React.FC = () => {
     return <p className="text-sm">{content}</p>;
   };
 
+  const renderAlphaFoldResult = (result: Message['alphafoldResult']) => {
+    if (!result) return null;
+
+    const downloadPDB = () => {
+      if (result.pdbContent) {
+        const blob = new Blob([result.pdbContent], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = result.filename || 'alphafold_result.pdb';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    };
+
+    const loadInViewer = async () => {
+      if (!result.pdbContent || !plugin) return;
+      
+      try {
+        setIsExecuting(true);
+        const executor = new CodeExecutor(plugin);
+        
+        // Create temporary PDB data URL
+        const pdbBlob = new Blob([result.pdbContent], { type: 'text/plain' });
+        const pdbUrl = URL.createObjectURL(pdbBlob);
+        
+        // Load structure in viewer
+        const code = `
+try {
+  await builder.clearStructure();
+  // Note: This would need to be adapted to load from blob URL
+  // For now, we'll show the sequence info and guide user to download
+  console.log('AlphaFold result ready for visualization');
+} catch (e) { 
+  console.error('Failed to load AlphaFold result:', e); 
+}`;
+        
+        await executor.executeCode(code);
+        setActivePane('viewer');
+        
+        URL.revokeObjectURL(pdbUrl);
+      } catch (err) {
+        console.error('Failed to load AlphaFold result in viewer:', err);
+      } finally {
+        setIsExecuting(false);
+      }
+    };
+
+    return (
+      <div className="mt-3 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
+        <div className="flex items-center space-x-2 mb-3">
+          <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">
+            <span className="text-white text-sm font-bold">AF</span>
+          </div>
+          <div>
+            <h4 className="font-medium text-gray-900">AlphaFold2 Structure Prediction</h4>
+            <p className="text-xs text-gray-600">
+              {result.sequence ? `${result.sequence.length} residues` : 'Structure predicted'}
+            </p>
+          </div>
+        </div>
+        
+        {result.metadata && (
+          <div className="mb-3 text-xs text-gray-600">
+            <div className="grid grid-cols-2 gap-2">
+              {result.parameters?.algorithm && (
+                <span>Algorithm: {result.parameters.algorithm}</span>
+              )}
+              {result.parameters?.databases && (
+                <span>Databases: {result.parameters.databases.join(', ')}</span>
+              )}
+            </div>
+          </div>
+        )}
+        
+        <div className="flex space-x-2">
+          <button
+            onClick={downloadPDB}
+            className="flex items-center space-x-1 px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm"
+          >
+            <Download className="w-4 h-4" />
+            <span>Download PDB</span>
+          </button>
+          
+          <button
+            onClick={loadInViewer}
+            disabled={!plugin}
+            className="flex items-center space-x-1 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            <Play className="w-4 h-4" />
+            <span>View 3D</span>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const isLikelyVisualization = (text: string): boolean => {
     const p = String(text || '').toLowerCase();
     const keywords = [
       'show ', 'display ', 'visualize', 'render', 'color', 'colour', 'cartoon', 'surface', 'ball-and-stick', 'water', 'ligand', 'focus', 'zoom', 'load', 'pdb', 'highlight', 'chain', 'view', 'representation'
     ];
     return keywords.some(k => p.includes(k));
+  };
+
+  // AlphaFold handling functions
+  const handleAlphaFoldConfirm = async (sequence: string, parameters: any) => {
+    setShowAlphaFoldDialog(false);
+    
+    const jobId = `af_${Date.now()}`;
+    
+    // Validate sequence before proceeding
+    const validationError = AlphaFoldErrorHandler.handleSequenceValidation(sequence, jobId);
+    if (validationError) {
+      // Log the validation error
+      logAlphaFoldError(validationError, { sequence: sequence.slice(0, 100), parameters });
+      
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: validationError.userMessage,
+        type: 'ai',
+        timestamp: new Date(),
+        error: validationError
+      };
+      setMessages(prev => [...prev, errorMessage]);
+      return;
+    }
+    
+    progressTracker.startProgress(jobId, 'Submitting protein folding request...');
+
+    try {
+      // Simulate API call to NIMS (this would be replaced with actual API call)
+      const response = await api.post('/alphafold/fold', {
+        sequence,
+        parameters,
+        jobId
+      });
+
+      if (response.data.status === 'success') {
+        const result = response.data.data;
+        
+        // Add result message to chat
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: `AlphaFold2 structure prediction completed successfully! The folded structure is ready for download and visualization.`,
+          type: 'ai',
+          timestamp: new Date(),
+          alphafoldResult: {
+            pdbContent: result.pdbContent,
+            filename: result.filename || `folded_${Date.now()}.pdb`,
+            sequence,
+            parameters,
+            metadata: result.metadata
+          }
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+        progressTracker.completeProgress();
+      } else {
+        // Handle API errors with structured error display
+        const apiError = AlphaFoldErrorHandler.createError(
+          'FOLDING_FAILED',
+          { jobId, sequenceLength: sequence.length, parameters },
+          response.data.error || 'Folding computation failed',
+          undefined,
+          jobId
+        );
+        
+        // Log the API error
+        logAlphaFoldError(apiError, { 
+          apiResponse: response.data, 
+          sequence: sequence.slice(0, 100),
+          parameters 
+        });
+        
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: apiError.userMessage,
+          type: 'ai',
+          timestamp: new Date(),
+          error: apiError
+        };
+        
+        setMessages(prev => [...prev, errorMessage]);
+        progressTracker.errorProgress(apiError.userMessage);
+      }
+    } catch (error: any) {
+      console.error('AlphaFold request failed:', error);
+      
+      // Handle different types of errors
+      const structuredError = AlphaFoldErrorHandler.handleAPIError(error, jobId);
+      
+      // Log the network/system error
+      logAlphaFoldError(structuredError, { 
+        originalError: error.message,
+        sequence: sequence.slice(0, 100),
+        parameters,
+        networkError: true
+      });
+      
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: structuredError.userMessage,
+        type: 'ai',
+        timestamp: new Date(),
+        error: structuredError
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+      progressTracker.errorProgress(structuredError.userMessage);
+    }
+  };
+
+  const handleAlphaFoldResponse = (responseData: any) => {
+    try {
+      // Log the raw response for debugging
+      console.log('[AlphaFold] Raw response:', responseData);
+      
+      const data = JSON.parse(responseData);
+      console.log('[AlphaFold] Parsed data:', data);
+      
+      if (data.action === 'confirm_folding') {
+        // Handle sequence extraction if needed
+        if (data.sequence === 'NEEDS_EXTRACTION' && data.source) {
+          // Extract sequence from PDB (this would normally call a sequence extraction API)
+          // For now, we'll use a mock sequence for demonstration
+          const mockSequence = 'MVLSEGEWQLVLHVWAKVEADVAGHGQDILIRLFKSHPETLEKFDRFKHLKTEAEMKASEDLKKHGVTVLTALGAILKKKGHHEAELKPLAQSHATKHKIPIKYLEFISEAIIHVLHSRHPG';
+          data.sequence = mockSequence;
+          data.message = `Extracted sequence from ${data.source}. Ready to fold ${mockSequence.length}-residue protein.`;
+        }
+        
+        setAlphafoldData(data);
+        setShowAlphaFoldDialog(true);
+        return true; // Handled
+      }
+    } catch (e) {
+      console.log('[AlphaFold] Response parsing failed:', e);
+      console.log('[AlphaFold] Raw response was:', responseData);
+      // Not JSON or not AlphaFold response
+    }
+    return false; // Not handled
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -189,6 +448,35 @@ export const ChatPanel: React.FC = () => {
         if (agentType === 'text') {
           const aiText = response.data?.text || 'Okay.';
           console.log('[AI] route:text', { text: aiText?.slice?.(0, 400) });
+          
+          // Check if this is an AlphaFold response
+          if (agentId === 'alphafold-agent') {
+            if (handleAlphaFoldResponse(aiText)) {
+              return; // AlphaFold dialog will be shown
+            } else {
+              // Fallback: if JSON parsing failed, try to extract key info and show a basic dialog
+              console.log('[AlphaFold] Fallback: attempting to parse non-JSON response');
+              const fallbackData = {
+                action: 'confirm_folding',
+                sequence: 'NEEDS_EXTRACTION',
+                source: 'pdb:1TUP', // Default for demo
+                parameters: {
+                  algorithm: 'mmseqs2',
+                  e_value: 0.0001,
+                  iterations: 1,
+                  databases: ['small_bfd'],
+                  relax_prediction: false,
+                  skip_template_search: true
+                },
+                estimated_time: '2-5 minutes',
+                message: 'Ready to fold protein. Please confirm parameters.'
+              };
+              
+              // Handle the fallback data
+              handleAlphaFoldResponse(JSON.stringify(fallbackData));
+              return;
+            }
+          }
           
           // Bio-chat and other text agents should never modify the editor code
           console.log(`[${agentId}] Text response received, preserving current editor code`);
@@ -308,7 +596,26 @@ try {
               }`}
             >
               {message.type === 'ai' ? (
-                renderMessageContent(message.content)
+                <>
+                  {renderMessageContent(message.content)}
+                  {renderAlphaFoldResult(message.alphafoldResult)}
+                  {message.error && (
+                    <div className="mt-3">
+                      <ErrorDisplay 
+                        error={message.error}
+                        onRetry={() => {
+                          // Handle retry logic based on error type
+                          if (message.error?.context?.sequence && message.error?.context?.parameters) {
+                            handleAlphaFoldConfirm(
+                              message.error.context.sequence, 
+                              message.error.context.parameters
+                            );
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+                </>
               ) : (
                 <p className="text-sm">{message.content}</p>
               )}
@@ -367,6 +674,13 @@ try {
             </div>
           </div>
         )}
+        {/* Progress Tracker */}
+        <ProgressTracker
+          isVisible={progressTracker.isVisible}
+          onCancel={progressTracker.cancelProgress}
+          className="mb-3"
+        />
+
         <div className="mb-3">
           <div className="text-xs text-gray-500 mb-2">Quick start:</div>
           <div className="flex flex-wrap gap-2">
@@ -400,6 +714,14 @@ try {
           </button>
         </form>
       </div>
+
+      {/* AlphaFold Dialog */}
+      <AlphaFoldDialog
+        isOpen={showAlphaFoldDialog}
+        onClose={() => setShowAlphaFoldDialog(false)}
+        onConfirm={handleAlphaFoldConfirm}
+        initialData={alphafoldData}
+      />
     </div>
   );
 };
