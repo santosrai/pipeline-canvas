@@ -27,9 +27,10 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({ session, onSel
   const isStarred = session.metadata.starred;
 
   // Format relative time
-  const formatRelativeTime = (date: Date) => {
+  const formatRelativeTime = (date: Date | string) => {
+    const dateObj = new Date(date);
     const now = new Date();
-    const diffInMs = now.getTime() - date.getTime();
+    const diffInMs = now.getTime() - dateObj.getTime();
     const diffInHours = diffInMs / (1000 * 60 * 60);
     const diffInDays = diffInHours / 24;
 
@@ -41,7 +42,7 @@ export const SessionListItem: React.FC<SessionListItemProps> = ({ session, onSel
     } else if (diffInDays < 7) {
       return `${Math.floor(diffInDays)}d ago`;
     } else {
-      return date.toLocaleDateString();
+      return dateObj.toLocaleDateString();
     }
   };
 

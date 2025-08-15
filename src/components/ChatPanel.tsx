@@ -323,7 +323,7 @@ try {
                 <p className="text-sm">{message.content}</p>
               )}
               <div className="text-xs mt-1 opacity-70">
-                {message.timestamp.toLocaleTimeString()}
+                {new Date(message.timestamp).toLocaleTimeString()}
               </div>
             </div>
           </div>

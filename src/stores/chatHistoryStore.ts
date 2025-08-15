@@ -89,6 +89,12 @@ const calculateStorageSize = (sessions: ChatSession[]): string => {
   return `${sizeInKB.toFixed(1)} KB`;
 };
 
+// Ensure date objects are properly converted
+const ensureDate = (value: any): Date => {
+  if (value instanceof Date) return value;
+  return new Date(value);
+};
+
 export const useChatHistoryStore = create<ChatHistoryState>()(
   persist(
     (set, get) => ({
@@ -449,12 +455,31 @@ export const useChatHistoryStore = create<ChatHistoryState>()(
         });
       },
       deserialize: (str) => {
-        return JSON.parse(str, (_, value) => {
+        const parsed = JSON.parse(str, (_, value) => {
           if (value && typeof value === 'object' && value.__type === 'Date') {
             return new Date(value.value);
           }
           return value;
         });
+        
+        // Ensure all dates in sessions are properly converted
+        if (parsed.sessions) {
+          parsed.sessions = parsed.sessions.map((session: any) => ({
+            ...session,
+            createdAt: ensureDate(session.createdAt),
+            lastModified: ensureDate(session.lastModified),
+            metadata: {
+              ...session.metadata,
+              lastActivity: ensureDate(session.metadata.lastActivity),
+            },
+            messages: session.messages.map((message: any) => ({
+              ...message,
+              timestamp: ensureDate(message.timestamp),
+            })),
+          }));
+        }
+        
+        return parsed;
       },
     }
   )

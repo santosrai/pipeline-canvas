@@ -4,6 +4,7 @@ import { CodeEditor } from './components/CodeEditor';
 import { MolstarViewer } from './components/MolstarViewer';
 import { SettingsDialog } from './components/SettingsDialog';
 import { ChatHistoryPanel } from './components/ChatHistoryPanel';
+import { ResizablePanel } from './components/ResizablePanel';
 import { Eye, Code2, Settings } from 'lucide-react';
 import { useAppStore } from './stores/appStore';
 import { useSettingsStore } from './stores/settingsStore';
@@ -11,7 +12,7 @@ import { useChatHistoryStore } from './stores/chatHistoryStore';
 import { useEffect } from 'react';
 
 function App() {
-  const { activePane, setActivePane } = useAppStore();
+  const { activePane, setActivePane, chatPanelWidth, setChatPanelWidth } = useAppStore();
   const { settings, isSettingsDialogOpen, setSettingsDialogOpen } = useSettingsStore();
   const { isHistoryPanelOpen, setHistoryPanelOpen } = useChatHistoryStore();
   
@@ -27,10 +28,17 @@ function App() {
       <Header />
       
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Chat */}
-        <div className="w-1/3 min-w-[300px] border-r border-gray-200 bg-white">
+        {/* Left Panel - Resizable Chat */}
+        <ResizablePanel
+          defaultWidth={chatPanelWidth}
+          minWidth={280}
+          maxWidth={800}
+          position="left"
+          onWidthChange={setChatPanelWidth}
+          className="bg-white"
+        >
           <ChatPanel />
-        </div>
+        </ResizablePanel>
         
         {/* Right Panel - Toolbar + Pane */}
         <div className="flex-1 flex flex-col">
