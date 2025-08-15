@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles } from 'lucide-react';
+import { Send, Sparkles, X } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import { CodeExecutor } from '../utils/codeExecutor';
 import { api } from '../utils/api';
@@ -14,7 +14,9 @@ interface Message {
 export const ChatPanel: React.FC = () => {
   const { plugin, currentCode, setCurrentCode, setIsExecuting, setActivePane, setPendingCodeToRun } = useAppStore();
   const selection = useAppStore(state => state.selection);
-  const setSelection = useAppStore(state => state.setSelection);
+  const selections = useAppStore(state => state.selections);
+  const removeSelection = useAppStore(state => state.removeSelection);
+  const clearSelections = useAppStore(state => state.clearSelections);
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -30,6 +32,17 @@ export const ChatPanel: React.FC = () => {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const formatSelection = (selection: any) => {
+    const chain = selection.labelAsymId ?? selection.authAsymId ?? '';
+    const seq = selection.labelSeqId != null && selection.labelSeqId !== ''
+      ? selection.labelSeqId
+      : selection.authSeqId != null
+        ? selection.authSeqId
+        : '';
+    const chainText = chain ? ` (${chain})` : '';
+    return `${selection.compId || '?'}${seq !== '' ? seq : ''}${chainText}`;
   };
 
   useEffect(() => {
@@ -115,9 +128,13 @@ export const ChatPanel: React.FC = () => {
           input: text,
           currentCode,
           history: messages.slice(-6).map(m => ({ type: m.type, content: m.content })),
-          selection,
+          selection: selections.length > 0 ? selections[0] : null, // First selection for backward compatibility
+          selections: selections, // Full selections array for new multi-selection support
         };
         console.log('[AI] route:request', payload);
+        console.log('[DEBUG] currentCode length:', currentCode?.length || 0);
+        console.log('[DEBUG] selections count:', selections.length);
+        console.log('[DEBUG] selections:', selections);
         const response = await api.post('/agents/route', payload);
         console.log('[AI] route:response', response?.data);
         const agentType = response.data?.type as 'code' | 'text' | undefined;
@@ -257,46 +274,37 @@ try {
       </div>
 
       <div className="p-4 border-t border-gray-200">
-        {/* Selection pill */}
-        {selection && (
-          <div className="mb-3 flex items-center justify-between bg-blue-50 text-blue-800 border border-blue-200 rounded px-3 py-2 gap-2">
-            <div className="text-xs font-medium truncate">
-              {(() => {
-                const chain = selection.labelAsymId ?? selection.authAsymId ?? '';
-                const seq =
-                  selection.labelSeqId != null && selection.labelSeqId !== ''
-                    ? selection.labelSeqId
-                    : selection.authSeqId != null
-                      ? selection.authSeqId
-                      : '';
-                const pdb = selection.pdbId ? ` • ${selection.pdbId}` : '';
-                const mut = selection.mutation?.toCompId ? ` → ${selection.mutation.toCompId}` : '';
-                const chainText = chain ? ` (Chain ${chain})` : '';
-                return `Selected: ${selection.compId || '?'}${seq !== '' ? ` ${seq}` : ''}${chainText}${pdb}${mut}`;
-              })()}
+        {/* Multiple selection chips */}
+        {selections.length > 0 && (
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs text-gray-500 font-medium">
+                Selected Residues ({selections.length})
+              </div>
+              {selections.length > 1 && (
+                <button
+                  onClick={clearSelections}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  Clear All
+                </button>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                placeholder="Replace with (e.g., ALA)"
-                maxLength={3}
-                className="w-36 text-xs px-2 py-1 border border-blue-200 rounded bg-white text-blue-900 placeholder-blue-400"
-                onChange={(e) => {
-                  const to = e.target.value.toUpperCase();
-                  if (!to) {
-                    setSelection({ ...selection, mutation: null });
-                  } else {
-                    setSelection({ ...selection, mutation: { toCompId: to } });
-                  }
-                }}
-                value={selection.mutation?.toCompId || ''}
-              />
-              <button
-                onClick={() => setSelection(null)}
-                className="text-xs text-blue-700 hover:text-blue-900"
-              >
-                Clear
-              </button>
+            <div className="flex flex-wrap gap-2">
+              {selections.map((sel, index) => (
+                <div 
+                  key={index}
+                  className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 border border-blue-200 rounded-full px-3 py-1 text-xs font-medium"
+                >
+                  <span>{formatSelection(sel)}</span>
+                  <button
+                    onClick={() => removeSelection(index)}
+                    className="ml-1 text-blue-600 hover:text-blue-800"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}

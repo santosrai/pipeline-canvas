@@ -17,7 +17,7 @@ export const MolstarViewer: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const { setPlugin: setStorePlugin, pendingCodeToRun, setPendingCodeToRun, setActivePane, setIsExecuting, currentCode } = useAppStore();
-  const setSelection = useAppStore(state => state.setSelection);
+  const addSelection = useAppStore(state => state.addSelection);
   const lastLoadedPdb = useAppStore(state => state.lastLoadedPdb);
 
   useEffect(() => {
@@ -65,7 +65,7 @@ export const MolstarViewer: React.FC = () => {
               const labelAsymId = StructureProperties.chain.label_asym_id(loc) || null;
               const authAsymId = StructureProperties.chain.auth_asym_id(loc) || null;
 
-              setSelection({
+              addSelection({
                 kind: 'residue',
                 pdbId: lastLoadedPdb || undefined,
                 compId,
@@ -172,8 +172,18 @@ export const MolstarViewer: React.FC = () => {
 
       // Record default PDB in store so SelectionContext has a PDB
       try {
-        const setLastLoadedPdb = useAppStore.getState?.().setLastLoadedPdb;
-        if (typeof setLastLoadedPdb === 'function') setLastLoadedPdb('1CBS');
+        const state = useAppStore.getState?.();
+        if (state?.setLastLoadedPdb) state.setLastLoadedPdb('1CBS');
+        
+        // Also set the current code so the backend knows what structure is loaded
+        if (state?.setCurrentCode && (!state.currentCode || state.currentCode.trim() === '')) {
+          const defaultCode = `try {
+  await builder.loadStructure('1CBS');
+  await builder.addCartoonRepresentation({ color: 'secondary-structure' });
+  builder.focusView();
+} catch (e) { console.error(e); }`;
+          state.setCurrentCode(defaultCode);
+        }
       } catch {}
 
       console.log('[Molstar] loadDefaultStructure: done');

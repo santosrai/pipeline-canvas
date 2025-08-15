@@ -12,9 +12,6 @@ export interface SelectionContext {
   labelAsymId?: string | null; // preferred chain id for display
   authAsymId?: string | null; // author chain id
   labelSeqId?: number | string | null; // preferred residue index for display
-  mutation?: {
-    toCompId: string; // target 3-letter residue code, e.g., ALA
-  } | null;
 }
 
 interface AppState {
@@ -24,7 +21,7 @@ interface AppState {
   isExecuting: boolean;
   lastLoadedPdb: string | null;
   pendingCodeToRun: string | null;
-  selection: SelectionContext | null;
+  selections: SelectionContext[];
   
   setActivePane: (pane: 'viewer' | 'editor') => void;
   setPlugin: (plugin: PluginUIContext | null) => void;
@@ -32,19 +29,25 @@ interface AppState {
   setIsExecuting: (executing: boolean) => void;
   setLastLoadedPdb: (pdb: string | null) => void;
   setPendingCodeToRun: (code: string | null) => void;
+  addSelection: (selection: SelectionContext) => void;
+  removeSelection: (index: number) => void;
+  clearSelections: () => void;
+  setSelections: (selections: SelectionContext[]) => void;
+  // Backward compatibility
   setSelection: (selection: SelectionContext | null) => void;
+  selection: SelectionContext | null;
 }
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       activePane: 'viewer',
       plugin: null,
       currentCode: '',
       isExecuting: false,
       lastLoadedPdb: null,
       pendingCodeToRun: null,
-      selection: null,
+      selections: [],
       
       setActivePane: (pane) => set({ activePane: pane }),
       setPlugin: (plugin) => set({ plugin }),
@@ -52,7 +55,40 @@ export const useAppStore = create<AppState>()(
       setIsExecuting: (executing) => set({ isExecuting: executing }),
       setLastLoadedPdb: (pdb) => set({ lastLoadedPdb: pdb }),
       setPendingCodeToRun: (code) => set({ pendingCodeToRun: code }),
-      setSelection: (selection) => set({ selection }),
+      
+      addSelection: (selection) => set((state) => {
+        // Check for duplicates based on key identifying properties
+        const isDuplicate = state.selections.some(existing => 
+          existing.compId === selection.compId &&
+          existing.labelSeqId === selection.labelSeqId &&
+          existing.authSeqId === selection.authSeqId &&
+          existing.labelAsymId === selection.labelAsymId &&
+          existing.pdbId === selection.pdbId
+        );
+        
+        if (!isDuplicate) {
+          return { selections: [...state.selections, selection] };
+        }
+        return state;
+      }),
+      
+      removeSelection: (index) => set((state) => ({
+        selections: state.selections.filter((_, i) => i !== index)
+      })),
+      
+      clearSelections: () => set({ selections: [] }),
+      
+      setSelections: (selections) => set({ selections }),
+      
+      // Backward compatibility - return first selection or null
+      get selection() { return get().selections[0] || null; },
+      setSelection: (selection) => {
+        if (selection === null) {
+          set({ selections: [] });
+        } else {
+          set({ selections: [selection] });
+        }
+      },
     }),
     {
       name: 'novoprotein-app-storage',
