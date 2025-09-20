@@ -6,9 +6,9 @@
     "auditLog": "/Users/alizabista/Downloads/Dev-Folder/novoprotien-ai/logs/.1e27119b49cc2e1bc1de64d39d75f2b5a8f1ff9f-audit.json",
     "files": [
         {
-            "date": 1755157092108,
-            "name": "/Users/alizabista/Downloads/Dev-Folder/novoprotien-ai/logs/mcp-puppeteer-2025-08-14.log",
-            "hash": "f4d9ce0b7186ec4b58a8c1634f01b21c04c558fc12a65167f54153494b0137f7"
+            "date": 1757110330274,
+            "name": "/Users/alizabista/Downloads/Dev-Folder/novoprotien-ai/logs/mcp-puppeteer-2025-09-05.log",
+            "hash": "070d1cd9c72da455417a6ed1a86faa9df328a7885cdefa9a6c6b432df87725ab"
         }
     ],
     "hashType": "sha256"

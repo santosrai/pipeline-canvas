@@ -144,6 +144,14 @@ async def route(request: Request):
             return {"error": "invalid_input"}
         input_text = spell_fix(input_text)
 
+        # Log the input for debugging
+        log_line("agent_route_input", {
+            "input": input_text,
+            "input_length": len(input_text),
+            "has_selection": bool(body.get("selection")),
+            "has_code": bool(body.get("currentCode"))
+        })
+        
         routed = await routerGraph.ainvoke(
             {
                 "input": input_text,
@@ -154,9 +162,23 @@ async def route(request: Request):
             }
         )
         agent_id = routed.get("routedAgentId")
+        
+        log_line("agent_route_result", {
+            "input": input_text,
+            "agentId": agent_id,
+            "reason": routed.get("reason"),
+            "is_alphafold": agent_id == "alphafold-agent"
+        })
+        
         if not agent_id:
             return {"error": "router_no_decision", "reason": routed.get("reason")}
         log_line("router", {"agentId": agent_id, "reason": routed.get("reason")})
+        log_line("agent_executing", {
+            "agentId": agent_id,
+            "agent_kind": agents[agent_id].get("kind"),
+            "input": input_text
+        })
+        
         res = await run_agent(
             agent=agents[agent_id],
             user_text=input_text,
@@ -165,6 +187,15 @@ async def route(request: Request):
             selection=body.get("selection"),
             selections=body.get("selections"),
         )
+        
+        log_line("agent_completed", {
+            "agentId": agent_id,
+            "response_type": res.get("type"),
+            "has_text": "text" in res,
+            "has_code": "code" in res,
+            "text_length": len(res.get("text", "")) if res.get("text") else 0
+        })
+        
         return {"agentId": agent_id, **res, "reason": routed.get("reason")}
     except Exception as e:
         log_line("agent_route_failed", {"error": str(e), "trace": traceback.format_exc()})
@@ -184,7 +215,21 @@ async def alphafold_fold(request: Request):
         parameters = body.get("parameters", {})
         job_id = body.get("jobId")
         
+        # Comprehensive logging
+        log_line("alphafold_request", {
+            "jobId": job_id,
+            "sequence_length": len(sequence) if sequence else 0,
+            "sequence_preview": sequence[:50] if sequence else None,
+            "parameters": parameters,
+            "client_ip": get_remote_address(request)
+        })
+        
         if not sequence or not job_id:
+            log_line("alphafold_validation_failed", {
+                "missing_sequence": not sequence,
+                "missing_jobId": not job_id,
+                "jobId": job_id
+            })
             return JSONResponse(
                 status_code=400,
                 content={
@@ -195,49 +240,35 @@ async def alphafold_fold(request: Request):
                 }
             )
         
-        result = await alphafold_handler.submit_folding_job({
-            "sequence": sequence,
-            "parameters": parameters,
-            "jobId": job_id
+        # Queue background job and return 202 Accepted immediately
+        log_line("alphafold_submitting", {
+            "jobId": job_id,
+            "handler": "alphafold_handler.submit_folding_job (background)"
         })
-        
-        # Check if result contains an error and return appropriate HTTP status
-        if result.get("status") == "error":
-            error_msg = result.get("error", "Unknown error")
-            
-            # Check for specific error types
-            if "API key not configured" in error_msg or "NVCF_RUN_KEY" in error_msg:
-                return JSONResponse(
-                    status_code=503,  # Service Unavailable
-                    content={
-                        "status": "error",
-                        "error": "",  # Empty for frontend error handling
-                        "errorCode": "NIMS_API_NOT_CONFIGURED",
-                        "userMessage": "AlphaFold service is not available. API key not configured.",
-                        "technicalMessage": error_msg,
-                        "suggestions": [
-                            {
-                                "action": "Contact administrator",
-                                "description": "The AlphaFold service requires NVIDIA API key configuration",
-                                "type": "contact",
-                                "priority": 1
-                            }
-                        ]
-                    }
-                )
-            else:
-                return JSONResponse(
-                    status_code=500,
-                    content={
-                        "status": "error",
-                        "error": "",  # Empty for frontend error handling
-                        "errorCode": "FOLDING_FAILED",
-                        "userMessage": "Protein folding computation failed",
-                        "technicalMessage": error_msg
-                    }
-                )
-        
-        return result
+        # Mark job as queued
+        try:
+            alphafold_handler.active_jobs[job_id] = "queued"
+        except Exception:
+            pass
+
+        # Run the folding job asynchronously
+        import asyncio as _asyncio
+        _asyncio.create_task(
+            alphafold_handler.submit_folding_job({
+                "sequence": sequence,
+                "parameters": parameters,
+                "jobId": job_id
+            })
+        )
+
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "accepted",
+                "jobId": job_id,
+                "message": "Folding job accepted. Poll /api/alphafold/status/{job_id} for updates."
+            }
+        )
         
     except Exception as e:
         log_line("alphafold_fold_failed", {"error": str(e), "trace": traceback.format_exc()})
@@ -431,4 +462,3 @@ async def chat(request: Request):
         if DEBUG_API:
             content["detail"] = str(e)
         return JSONResponse(status_code=500, content=content)
-

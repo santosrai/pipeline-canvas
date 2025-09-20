@@ -7,26 +7,58 @@ Integrates sequence extraction, NIMS API calls, and result processing.
 import asyncio
 import json
 import logging
+import os
+from pathlib import Path
 from typing import Dict, Any, Optional
-# Import sequence_utils and nims_client
+# Import sequence_utils and nims_client - prioritize non-relative imports
 try:
-    # Try relative import first (when imported as module)
-    from .sequence_utils import SequenceExtractor
-    from .nims_client import NIMSClient
+    # Try absolute import first (most reliable)
+    from sequence_utils import SequenceExtractor
+    from nims_client import NIMSClient
 except ImportError:
     try:
-        # Try absolute import (when running as script)
-        from sequence_utils import SequenceExtractor
-        from nims_client import NIMSClient
-    except ImportError:
-        # Try importing from current directory
+        # Add current directory to path and import
         import sys
         import os
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         from sequence_utils import SequenceExtractor
         from nims_client import NIMSClient
+    except ImportError:
+        # Last resort: try relative import
+        from .sequence_utils import SequenceExtractor
+        from .nims_client import NIMSClient
 
+# Set up file logging for AlphaFold API
+def setup_alphafold_logging():
+    """Set up file logging for AlphaFold API requests"""
+    log_dir = Path(__file__).parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    
+    log_file = log_dir / "alphafold_api.log"
+    
+    # Create a logger with a specific name for AlphaFold API
+    api_logger = logging.getLogger('alphafold_handler.api')
+    api_logger.setLevel(logging.INFO)
+    
+    # Avoid adding multiple handlers if already configured
+    if not api_logger.handlers:
+        # File handler
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler.setLevel(logging.INFO)
+        
+        # Formatter
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        file_handler.setFormatter(formatter)
+        api_logger.addHandler(file_handler)
+    
+    return api_logger
+
+# Set up logging
 logger = logging.getLogger(__name__)
+api_logger = setup_alphafold_logging()
 
 class AlphaFoldHandler:
     """Handles AlphaFold folding requests from the frontend"""
@@ -34,7 +66,8 @@ class AlphaFoldHandler:
     def __init__(self):
         self.sequence_extractor = SequenceExtractor()
         self.nims_client = None  # Initialize when needed
-        self.active_jobs = {}  # Track running jobs
+        self.active_jobs = {}  # Track running jobs: queued|running|completed|error|cancelled
+        self.job_results: Dict[str, Any] = {}  # Store results or errors by job_id
     
     def _get_nims_client(self) -> NIMSClient:
         """Get or create NIMS client"""
@@ -205,7 +238,20 @@ class AlphaFoldHandler:
         sequence = job_data.get("sequence")
         parameters = job_data.get("parameters", {})
         
+        # Log to both console and file
+        logger.info(f"[AlphaFold Handler] Starting job {job_id} with sequence length {len(sequence) if sequence else 0}")
+        logger.info(f"[AlphaFold Handler] Parameters: {parameters}")
+        
+        # Detailed file logging
+        api_logger.info(f"=== AlphaFold Job Started ===")
+        api_logger.info(f"Job ID: {job_id}")
+        api_logger.info(f"Sequence Length: {len(sequence) if sequence else 0}")
+        api_logger.info(f"Sequence Preview: {sequence[:50] + '...' if sequence and len(sequence) > 50 else sequence}")
+        api_logger.info(f"Parameters: {json.dumps(parameters, indent=2)}")
+        
         if not sequence or not job_id:
+            logger.error(f"[AlphaFold Handler] Missing required parameters: sequence={bool(sequence)}, job_id={bool(job_id)}")
+            api_logger.error(f"Missing required parameters: sequence={bool(sequence)}, job_id={bool(job_id)}")
             return {
                 "status": "error",
                 "error": "Missing sequence or job ID"
@@ -214,9 +260,15 @@ class AlphaFoldHandler:
         try:
             # Initialize NIMS client (this will catch configuration errors)
             try:
+                logger.info(f"[AlphaFold Handler] Initializing NIMS client for job {job_id}")
+                api_logger.info(f"Initializing NIMS client for job {job_id}")
                 nims_client = self._get_nims_client()
+                logger.info(f"[AlphaFold Handler] NIMS client initialized successfully for job {job_id}")
+                api_logger.info(f"NIMS client initialized successfully for job {job_id}")
             except ValueError as config_error:
                 # Configuration error (missing API key, etc.)
+                logger.error(f"[AlphaFold Handler] NIMS client initialization failed for job {job_id}: {config_error}")
+                api_logger.error(f"NIMS client initialization failed for job {job_id}: {config_error}")
                 self.active_jobs[job_id] = "error"
                 return {
                     "status": "error",
@@ -230,47 +282,80 @@ class AlphaFoldHandler:
                 logger.info(f"Job {job_id} progress: {progress}% - {message}")
             
             # Start the folding job
+            # Mark as running
             self.active_jobs[job_id] = "running"
+            logger.info(f"[AlphaFold Handler] Job {job_id} marked as running, submitting to NIMS API")
+            api_logger.info(f"Job {job_id} status: running")
+            api_logger.info(f"Submitting to NIMS API...")
             
             # Submit to NIMS API
+            logger.info(f"[AlphaFold Handler] Calling NIMS API for job {job_id}")
+            api_logger.info(f"=== NVIDIA NIMS API Request ===")
+            api_logger.info(f"Calling NIMS API for job {job_id}")
+            
             result = await nims_client.submit_folding_request(
                 sequence=sequence,
                 progress_callback=progress_callback,
                 **parameters
             )
             
+            logger.info(f"[AlphaFold Handler] NIMS API call completed for job {job_id}, result status: {result.get('status')}")
+            api_logger.info(f"=== NVIDIA NIMS API Response ===")
+            api_logger.info(f"Status: {result.get('status')}")
+            api_logger.info(f"Result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
+            
             if result.get("status") == "completed":
                 # Extract PDB content
                 pdb_content = nims_client.extract_pdb_from_result(result["data"])
-                
+
                 if pdb_content:
                     # Save PDB file
                     filename = f"alphafold_{job_id}.pdb"
                     filepath = nims_client.save_pdb_file(pdb_content, filename)
                     
                     self.active_jobs[job_id] = "completed"
-                    
+                    # Persist result for status polling retrieval
+                    self.job_results[job_id] = {
+                        "pdbContent": pdb_content,
+                        "filename": filename,
+                        "filepath": filepath,
+                        "metadata": {
+                            "sequence_length": len(sequence),
+                            "job_id": job_id,
+                            "parameters": parameters
+                        },
+                        "status": result.get("status", "completed")
+                    }
                     return {
                         "status": "success",
-                        "data": {
-                            "pdbContent": pdb_content,
-                            "filename": filename,
-                            "filepath": filepath,
-                            "metadata": {
-                                "sequence_length": len(sequence),
-                                "job_id": job_id,
-                                "parameters": parameters
-                            }
-                        }
+                        "data": self.job_results[job_id]
                     }
                 else:
                     self.active_jobs[job_id] = "error"
+                    api_logger.error(
+                        "AlphaFold job %s completed without PDB content", job_id
+                    )
+                    self.job_results[job_id] = {
+                        "error": "No PDB content in API response",
+                        "status": result.get("status", "error"),
+                    }
                     return {
                         "status": "error",
                         "error": "No PDB content in API response"
                     }
             else:
                 self.active_jobs[job_id] = "error"
+                api_logger.error(
+                    "AlphaFold job %s failed with status=%s error=%s",
+                    job_id,
+                    result.get("status"),
+                    result.get("error"),
+                )
+                self.job_results[job_id] = {
+                    "error": result.get("error", "Folding failed"),
+                    "status": result.get("status", "error"),
+                    "details": result.get("details"),
+                }
                 return {
                     "status": "error",
                     "error": result.get("error", "Folding failed")
@@ -279,6 +364,7 @@ class AlphaFoldHandler:
         except Exception as e:
             logger.error(f"AlphaFold job {job_id} failed: {e}")
             self.active_jobs[job_id] = "error"
+            self.job_results[job_id] = {"error": str(e)}
             return {
                 "status": "error",
                 "error": str(e)
@@ -287,10 +373,18 @@ class AlphaFoldHandler:
     def get_job_status(self, job_id: str) -> Dict[str, Any]:
         """Get status of a running job"""
         status = self.active_jobs.get(job_id, "not_found")
-        return {
-            "job_id": job_id,
-            "status": status
-        }
+        response: Dict[str, Any] = {"job_id": job_id, "status": status}
+        if status == "completed":
+            # Include result payload
+            data = self.job_results.get(job_id)
+            if data:
+                response["data"] = data
+        elif status == "error":
+            # Include error message
+            err = self.job_results.get(job_id, {}).get("error")
+            if err:
+                response["error"] = err
+        return response
     
     def cancel_job(self, job_id: str) -> Dict[str, Any]:
         """Cancel a running job"""

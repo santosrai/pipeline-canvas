@@ -241,12 +241,21 @@ class SequenceExtractor:
         
         # Check if it might be a direct sequence
         if not result["pdb_id"] and not result["type"]:
-            # Look for sequence-like patterns
+            # Look for sequence-like patterns with more flexible matching
+            # Pattern 1: "sequence XXXXX" or "sequence: XXXXX"
             seq_pattern = re.search(r'sequence[:\s]*([ACDEFGHIKLMNPQRSTVWY\s]+)', text.upper())
             if seq_pattern:
                 potential_seq = re.sub(r'\s', '', seq_pattern.group(1))
                 if len(potential_seq) >= 10:  # Minimum reasonable length
                     result["type"] = "sequence"
+                    result["sequence"] = potential_seq
+            else:
+                # Pattern 2: Look for any long stretch of amino acids (for "dock this sequence XXXX")
+                # Find sequences of amino acids that are at least 15 characters long
+                aa_pattern = re.search(r'\b([ACDEFGHIKLMNPQRSTVWY]{15,})', text.upper())
+                if aa_pattern:
+                    potential_seq = aa_pattern.group(1)
+                    result["type"] = "sequence" 
                     result["sequence"] = potential_seq
         
         return result

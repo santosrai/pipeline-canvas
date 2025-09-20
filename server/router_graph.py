@@ -58,8 +58,16 @@ class SimpleRouterGraph:
             return {"routedAgentId": "uniprot-search", "reason": "rule:uniprot-search"}
         
         # AlphaFold folding/docking rule
-        alphafold_keywords = ["fold", "dock", "predict structure", "alphafold", "structure prediction", "fold protein", "dock protein", "predict fold"]
-        if any(k in low for k in alphafold_keywords):
+        alphafold_keywords = [
+            "fold", "dock", "predict structure", "alphafold", "structure prediction",
+            "fold protein", "dock protein", "predict fold", "predict 3d structure",
+            "predicts 3d structure", "3d structure", "3-d structure"
+        ]
+        predicts_structure_signal = (
+            ("predict" in low or "predicts" in low or "prediction" in low)
+            and ("structure" in low or "3d" in low or "3-d" in low)
+        )
+        if any(k in low for k in alphafold_keywords) or predicts_structure_signal:
             return {"routedAgentId": "alphafold-agent", "reason": "rule:alphafold-folding"}
         
         # RFdiffusion protein design rule

@@ -234,9 +234,14 @@ try {
 
   // AlphaFold handling functions
   const handleAlphaFoldConfirm = async (sequence: string, parameters: any) => {
+    console.log('🚀 [AlphaFold] User confirmed folding request');
+    console.log('📊 [AlphaFold] Sequence length:', sequence.length);
+    console.log('⚙️ [AlphaFold] Parameters:', parameters);
+    
     setShowAlphaFoldDialog(false);
     
     const jobId = `af_${Date.now()}`;
+    console.log('🆔 [AlphaFold] Generated job ID:', jobId);
     
     // Validate sequence before proceeding
     const validationError = AlphaFoldErrorHandler.handleSequenceValidation(sequence, jobId);
@@ -251,19 +256,117 @@ try {
         timestamp: new Date(),
         error: validationError
       };
-      setMessages(prev => [...prev, errorMessage]);
+      addMessage(errorMessage);
       return;
     }
     
     progressTracker.startProgress(jobId, 'Submitting protein folding request...');
+    console.log('📡 [AlphaFold] Starting progress tracking for job:', jobId);
 
     try {
-      // Simulate API call to NIMS (this would be replaced with actual API call)
+      console.log('🌐 [AlphaFold] Making API call to /api/alphafold/fold');
+      console.log('📦 [AlphaFold] Payload:', { sequence: sequence.slice(0, 50) + '...', parameters, jobId });
+      
+      // Call the AlphaFold API endpoint
       const response = await api.post('/alphafold/fold', {
         sequence,
         parameters,
         jobId
       });
+      
+      console.log('📨 [AlphaFold] API response received:', response.status, response.data);
+
+      // Async flow: 202 Accepted → poll status endpoint until completion
+      if (response.status === 202 || response.data.status === 'accepted' || response.data.status === 'queued' || response.data.status === 'running') {
+        console.log('🕒 [AlphaFold] Job accepted, starting polling for status...', { jobId });
+        const start = Date.now();
+        const poll = async () => {
+          try {
+            const statusResp = await api.get(`/alphafold/status/${jobId}`);
+            const st = statusResp.data?.status;
+            if (st === 'completed') {
+              const result = statusResp.data?.data || {};
+              const aiMessage: Message = {
+                id: (Date.now() + 1).toString(),
+                content: `AlphaFold2 structure prediction completed successfully! The folded structure is ready for download and visualization.`,
+                type: 'ai',
+                timestamp: new Date(),
+                alphafoldResult: {
+                  pdbContent: result.pdbContent,
+                  filename: result.filename || `folded_${Date.now()}.pdb`,
+                  sequence,
+                  parameters,
+                  metadata: result.metadata
+                }
+              };
+              addMessage(aiMessage);
+              progressTracker.completeProgress();
+              return true;
+            } else if (st === 'error') {
+              const apiError = AlphaFoldErrorHandler.createError(
+                'FOLDING_FAILED',
+                { jobId, sequenceLength: sequence.length, parameters },
+                statusResp.data?.error || 'Folding computation failed',
+                undefined,
+                jobId
+              );
+              logAlphaFoldError(apiError, { apiResponse: statusResp.data, sequence: sequence.slice(0, 100), parameters });
+              const errorMessage: Message = {
+                id: (Date.now() + 1).toString(),
+                content: apiError.userMessage,
+                type: 'ai',
+                timestamp: new Date(),
+                error: apiError
+              };
+              addMessage(errorMessage);
+              progressTracker.errorProgress(apiError.userMessage);
+              return true;
+            } else {
+              // Update progress heuristically up to 90%
+              const elapsed = (Date.now() - start) / 1000;
+              const estDuration = 300; // 5 minutes heuristic
+              const pct = Math.min(90, Math.round((elapsed / estDuration) * 90));
+              progressTracker.updateProgress(`Processing... (${Math.round(elapsed)}s)`, pct);
+              return false;
+            }
+          } catch (e) {
+            console.warn('⚠️ [AlphaFold] Polling failed, will retry...', e);
+            return false;
+          }
+        };
+
+        // Poll every 3s until done or timeout (~15 minutes)
+        const timeoutSec = 15 * 60;
+        let finished = false;
+        while (!finished && (Date.now() - start) / 1000 < timeoutSec) {
+          // eslint-disable-next-line no-await-in-loop
+          finished = await poll();
+          if (finished) break;
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise(res => setTimeout(res, 3000));
+        }
+
+        if (!finished) {
+          const apiError = AlphaFoldErrorHandler.createError(
+            'FOLDING_FAILED',
+            { jobId, sequenceLength: sequence.length, parameters },
+            'Folding timed out',
+            undefined,
+            jobId
+          );
+          logAlphaFoldError(apiError, { sequence: sequence.slice(0, 100), parameters, timedOut: true });
+          const errorMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            content: apiError.userMessage,
+            type: 'ai',
+            timestamp: new Date(),
+            error: apiError
+          };
+          addMessage(errorMessage);
+          progressTracker.errorProgress(apiError.userMessage);
+        }
+        return; // Exit after async flow
+      }
 
       if (response.data.status === 'success') {
         const result = response.data.data;
@@ -283,7 +386,7 @@ try {
           }
         };
         
-        setMessages(prev => [...prev, aiMessage]);
+        addMessage(aiMessage);
         progressTracker.completeProgress();
       } else {
         // Handle API errors with structured error display
@@ -310,7 +413,7 @@ try {
           error: apiError
         };
         
-        setMessages(prev => [...prev, errorMessage]);
+        addMessage(errorMessage);
         progressTracker.errorProgress(apiError.userMessage);
       }
     } catch (error: any) {
@@ -335,7 +438,7 @@ try {
         error: structuredError
       };
       
-      setMessages(prev => [...prev, errorMessage]);
+      addMessage(errorMessage);
       progressTracker.errorProgress(structuredError.userMessage);
     }
   };
@@ -369,7 +472,7 @@ try {
           }
         };
         
-        setMessages(prev => [...prev, aiMessage]);
+        addMessage(aiMessage);
       } else {
         // Handle API error response
         const apiError = RFdiffusionErrorHandler.handleError(response.data, {
@@ -386,7 +489,7 @@ try {
           error: apiError
         };
         
-        setMessages(prev => [...prev, errorMessage]);
+        addMessage(errorMessage);
       }
     } catch (error: any) {
       console.error('RFdiffusion request failed:', error);
@@ -406,28 +509,38 @@ try {
         error: structuredError
       };
       
-      setMessages(prev => [...prev, errorMessage]);
+      addMessage(errorMessage);
     }
   };
 
   const handleAlphaFoldResponse = (responseData: any) => {
     try {
-      // Log the raw response for debugging
-      console.log('[AlphaFold] Raw response:', responseData);
+      // Enhanced logging for debugging
+      console.log('🧬 [AlphaFold] Raw response received:', responseData);
+      console.log('🧬 [AlphaFold] Response type:', typeof responseData);
+      console.log('🧬 [AlphaFold] Response length:', responseData?.length || 0);
       
       const data = JSON.parse(responseData);
-      console.log('[AlphaFold] Parsed data:', data);
+      console.log('✅ [AlphaFold] Successfully parsed JSON:', data);
+      console.log('🔍 [AlphaFold] Action detected:', data.action);
       
       if (data.action === 'confirm_folding') {
+        console.log('🎯 [AlphaFold] Confirm folding action detected');
+        
         // Handle sequence extraction if needed
         if (data.sequence === 'NEEDS_EXTRACTION' && data.source) {
+          console.log('🧪 [AlphaFold] Sequence needs extraction from:', data.source);
           // Extract sequence from PDB (this would normally call a sequence extraction API)
           // For now, we'll use a mock sequence for demonstration
           const mockSequence = 'MVLSEGEWQLVLHVWAKVEADVAGHGQDILIRLFKSHPETLEKFDRFKHLKTEAEMKASEDLKKHGVTVLTALGAILKKKGHHEAELKPLAQSHATKHKIPIKYLEFISEAIIHVLHSRHPG';
           data.sequence = mockSequence;
           data.message = `Extracted sequence from ${data.source}. Ready to fold ${mockSequence.length}-residue protein.`;
+          console.log('✅ [AlphaFold] Mock sequence extracted, length:', mockSequence.length);
+        } else {
+          console.log('📝 [AlphaFold] Direct sequence provided, length:', data.sequence?.length || 0);
         }
         
+        console.log('💬 [AlphaFold] Setting dialog data and showing dialog');
         setAlphafoldData(data);
         setShowAlphaFoldDialog(true);
         return true; // Handled
@@ -533,11 +646,16 @@ try {
           
           // Check if this is an AlphaFold response
           if (agentId === 'alphafold-agent') {
+            console.log('🧬 [AlphaFold] Agent detected, processing response');
+            console.log('📄 [AlphaFold] Agent response text:', aiText.slice(0, 200) + '...');
+            
             if (handleAlphaFoldResponse(aiText)) {
+              console.log('✅ [AlphaFold] Response handled successfully, dialog should be shown');
               return; // AlphaFold dialog will be shown
             } else {
               // Fallback: if JSON parsing failed, try to extract key info and show a basic dialog
-              console.log('[AlphaFold] Fallback: attempting to parse non-JSON response');
+              console.log('⚠️ [AlphaFold] Fallback: attempting to parse non-JSON response');
+              console.log('🔍 [AlphaFold] Full response text:', aiText);
               const fallbackData = {
                 action: 'confirm_folding',
                 sequence: 'NEEDS_EXTRACTION',
