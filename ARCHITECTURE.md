@@ -462,3 +462,4 @@ Save this as `ARCHITECTURE.md` in your project root. It covers:
 7. **Extension points** for adding new features
 
 This should help LLMs understand the codebase structure and relationships.
+
