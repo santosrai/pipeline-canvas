@@ -1,4 +1,0 @@
-{
-  "status": "error",
-  "error": "HTTP 422: {\"type\":\"urn:inference-service:problem-details:unprocessable-entity\",\"title\":\"Unprocessable Entity\",\"status\":422,\"detail\":\"Validation Errors: num_designs: Extra inputs are not permitted; temperature: Extra inputs are not permitted\"}"
-}

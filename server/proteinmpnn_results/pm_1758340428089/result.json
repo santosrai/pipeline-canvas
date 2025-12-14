@@ -1,4 +1,0 @@
-{
-  "status": "error",
-  "error": "Cannot connect to host health.api.nvidia.com:443 ssl:True [SSLCertVerificationError: (1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:997)')]"
-}
