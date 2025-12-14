@@ -9,12 +9,12 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from .utils import log_line
-
 try:
+    from .utils import log_line
     from .proteinmpnn_client import get_proteinmpnn_client, ProteinMPNNClient
     from .pdb_storage import get_uploaded_pdb, list_uploaded_pdbs
 except ImportError:
+    from utils import log_line
     from proteinmpnn_client import get_proteinmpnn_client, ProteinMPNNClient
     from pdb_storage import get_uploaded_pdb, list_uploaded_pdbs
 
