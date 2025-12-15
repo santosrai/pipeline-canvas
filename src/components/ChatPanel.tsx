@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Download, Play, X, Copy, Plus } from 'lucide-react';
+import { Send, Sparkles, Download, Play, X, Copy } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import { useChatHistoryStore, useActiveSession, Message } from '../stores/chatHistoryStore';
 import { CodeExecutor } from '../utils/codeExecutor';
-import { api, fetchAgents, fetchModels, Agent, Model } from '../utils/api';
+import { api, fetchAgents, fetchModels, Agent, Model, streamAgentRoute } from '../utils/api';
 import { v4 as uuidv4 } from 'uuid';
 import { AlphaFoldDialog } from './AlphaFoldDialog';
 import { RFdiffusionDialog } from './RFdiffusionDialog';
@@ -15,6 +15,7 @@ import { logAlphaFoldError } from '../utils/errorLogger';
 import { AgentSelector } from './AgentSelector';
 import { ModelSelector } from './ModelSelector';
 import { useAgentSettings } from '../stores/settingsStore';
+import { ThinkingProcessDisplay } from './ThinkingProcessDisplay';
 
 // Extended message metadata for structured agent results
 interface ExtendedMessage extends Message {
@@ -39,6 +40,17 @@ interface ExtendedMessage extends Message {
       raw?: string;
     };
     metadata?: Record<string, any>;
+  };
+  thinkingProcess?: {
+    steps: Array<{
+      id: string;
+      title: string;
+      content: string;
+      status: 'pending' | 'processing' | 'completed';
+      timestamp?: Date;
+    }>;
+    isComplete: boolean;
+    totalSteps: number;
   };
   error?: ErrorDetails;
 }
@@ -128,6 +140,39 @@ const renderProteinMPNNResult = (result: ExtendedMessage['proteinmpnnResult']) =
   );
 };
 
+// Helper function to convert backend thinking data to frontend format
+const convertThinkingData = (thinkingProcess: any, isComplete: boolean = false): ExtendedMessage['thinkingProcess'] | undefined => {
+  if (!thinkingProcess) return undefined;
+  
+  // Backend returns: { steps: [...], isComplete: bool, totalSteps: number }
+  // Frontend expects: { steps: ThinkingStep[], isComplete: bool, totalSteps: number }
+  if (thinkingProcess.steps && Array.isArray(thinkingProcess.steps)) {
+    const steps = thinkingProcess.steps.map((step: any, index: number) => {
+      // If not complete and this is the last step, mark it as processing
+      let status = step.status || 'completed';
+      if (!isComplete && index === thinkingProcess.steps.length - 1) {
+        status = 'processing';
+      }
+      
+      return {
+        id: step.id || `step_${index}`,
+        title: step.title || 'Thinking Step',
+        content: step.content || '',
+        status: status as 'pending' | 'processing' | 'completed',
+        timestamp: step.timestamp ? new Date(step.timestamp) : undefined
+      };
+    });
+    
+    return {
+      steps,
+      isComplete: isComplete && thinkingProcess.isComplete !== false,
+      totalSteps: thinkingProcess.totalSteps || thinkingProcess.steps.length
+    };
+  }
+  
+  return undefined;
+};
+
 const extractProteinMPNNSequences = (payload: any): string[] => {
   if (!payload) return [];
 
@@ -198,7 +243,7 @@ export const ChatPanel: React.FC = () => {
   const clearSelections = useAppStore(state => state.clearSelections);
 
   // Chat history store
-  const { createSession, activeSessionId, saveVisualizationCode, getVisualizationCode, saveViewerVisibility, getViewerVisibility } = useChatHistoryStore();
+  const { createSession, activeSessionId, saveVisualizationCode, getVisualizationCode, saveViewerVisibility, getViewerVisibility, getActiveSession } = useChatHistoryStore();
   const isViewerVisible = useAppStore(state => state.isViewerVisible);
   
   // Helper function to set viewer visibility and save to session
@@ -208,7 +253,7 @@ export const ChatPanel: React.FC = () => {
       saveViewerVisibility(activeSessionId, visible);
     }
   };
-  const { activeSession, addMessage } = useActiveSession();
+  const { activeSession, addMessage, updateMessages } = useActiveSession();
 
   // Agent and model settings
   const { settings: agentSettings } = useAgentSettings();
@@ -340,6 +385,17 @@ export const ChatPanel: React.FC = () => {
   // Agent and model selection state
   const [agents, setAgents] = useState<Agent[]>([]);
   const [models, setModels] = useState<Model[]>([]);
+
+  // Helper function to check if a model is a thinking model
+  const isThinkingModel = (modelId: string | null): boolean => {
+    if (!modelId) return false;
+    const lowerId = modelId.toLowerCase();
+    return lowerId.includes('-thinking') || lowerId.includes(':thinking') || lowerId.includes('thinking');
+  };
+
+  // Check if currently selected model is a thinking model
+  const selectedModelId = agentSettings.selectedModel;
+  const isThinkingModelSelected = isThinkingModel(selectedModelId);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1067,23 +1123,217 @@ try {
     setInput('');
     setIsLoading(true);
 
+    // Create placeholder AI message immediately for real-time thinking display
+    let placeholderMessageId: string | null = null;
+    if (isThinkingModelSelected) {
+      const placeholderMsg: ExtendedMessage = {
+        id: uuidv4(),
+        content: '',
+        type: 'ai',
+        timestamp: new Date(),
+        thinkingProcess: {
+          steps: [],
+          isComplete: false,
+          totalSteps: 0
+        }
+      };
+      placeholderMessageId = placeholderMsg.id;
+      addMessage(placeholderMsg);
+    }
+
     try {
       const text = userMessage.content;
       let code = '';
+      let thinkingProcess: ExtendedMessage['thinkingProcess'] | undefined = undefined;
+      let messageAlreadyUpdated = false; // Track if message was updated during streaming
+      
+      const payload = {
+        input: text,
+        currentCode,
+        history: messages.slice(-6).map(m => ({ type: m.type, content: m.content })),
+        selection: selections.length > 0 ? selections[0] : null, // First selection for backward compatibility
+        selections: selections, // Full selections array for new multi-selection support
+        agentId: agentSettings.selectedAgentId || undefined, // Only send if manually selected
+        model: agentSettings.selectedModel || undefined, // Only send if manually selected
+      };
+      console.log('[AI] route:request', payload);
+      console.log('[DEBUG] currentCode length:', currentCode?.length || 0);
+      console.log('[DEBUG] selections count:', selections.length);
+      console.log('[DEBUG] selections:', selections);
+      
+      // Use streaming for thinking models
+      console.log('[Stream] Check:', { 
+        isThinkingModelSelected, 
+        placeholderMessageId, 
+        selectedModelId,
+        willUseStreaming: isThinkingModelSelected && placeholderMessageId 
+      });
+      
+      if (isThinkingModelSelected && placeholderMessageId) {
+        try {
+          console.log('[Stream] Starting streaming request for thinking model');
+          let accumulatedContent = '';
+          let accumulatedThinkingSteps: Array<{
+            id: string;
+            title: string;
+            content: string;
+            status: 'pending' | 'processing' | 'completed';
+          }> = [];
+          let finalResult: any = null;
+          
+          // Helper function to get fresh session and update messages
+          const updateMessageWithFreshSession = (updater: (msg: ExtendedMessage) => ExtendedMessage) => {
+            const currentSession = getActiveSession();
+            if (!currentSession || currentSession.id !== activeSessionId) {
+              console.warn('[Stream] Session changed or not found during streaming', {
+                currentSessionId: currentSession?.id,
+                expectedSessionId: activeSessionId
+              });
+              return false;
+            }
+            
+            // Verify placeholder message exists
+            const placeholderExists = currentSession.messages.some((msg: Message) => msg.id === placeholderMessageId);
+            if (!placeholderExists) {
+              console.warn('[Stream] Placeholder message not found in session', { placeholderMessageId });
+              return false;
+            }
+            
+            const updatedMessages = currentSession.messages.map((msg: Message) => 
+              msg.id === placeholderMessageId
+                ? updater(msg as ExtendedMessage)
+                : msg
+            );
+            updateMessages(updatedMessages);
+            return true;
+          };
+          
+          for await (const chunk of streamAgentRoute(payload)) {
+            // Check if session still exists and matches
+            const currentSession = getActiveSession();
+            if (!currentSession || currentSession.id !== activeSessionId) {
+              console.warn('[Stream] Session changed during streaming, stopping');
+              break;
+            }
+            
+            if (chunk.type === 'thinking_step') {
+              const step = chunk.data;
+              // Update or add step
+              const existingIdx = accumulatedThinkingSteps.findIndex(s => s.id === step.id);
+              if (existingIdx >= 0) {
+                accumulatedThinkingSteps[existingIdx] = step;
+              } else {
+                accumulatedThinkingSteps.push(step);
+              }
+              
+              // Update message with current thinking steps using fresh session
+              const thinkingData: ExtendedMessage['thinkingProcess'] = {
+                steps: [...accumulatedThinkingSteps],
+                isComplete: false,
+                totalSteps: accumulatedThinkingSteps.length
+              };
+              
+              updateMessageWithFreshSession(msg => ({
+                ...msg,
+                thinkingProcess: thinkingData
+              }));
+            } else if (chunk.type === 'content') {
+              // Accumulate content
+              accumulatedContent += chunk.data.text || '';
+              
+              // Update message content incrementally using fresh session
+              updateMessageWithFreshSession(msg => ({
+                ...msg,
+                content: accumulatedContent
+              }));
+            } else if (chunk.type === 'complete') {
+              // Final result
+              finalResult = chunk.data;
+              console.log('[Stream] Complete:', finalResult);
+              
+              // Finalize message using fresh session
+              const thinkingData = convertThinkingData(finalResult.thinkingProcess, true);
+              updateMessageWithFreshSession(msg => ({
+                ...msg,
+                content: finalResult.text || accumulatedContent,
+                thinkingProcess: thinkingData || msg.thinkingProcess
+              }));
+              
+              // Handle special agents (AlphaFold, etc.)
+              const agentId = finalResult.agentId;
+              if (agentId === 'alphafold-agent' || agentId === 'proteinmpnn-agent' || agentId === 'rfdiffusion-agent') {
+                if (handleAlphaFoldResponse(finalResult.text)) {
+                  setIsLoading(false);
+                  return;
+                }
+              }
+              
+              // For text agents, we're done
+              if (finalResult.type === 'text') {
+                setIsLoading(false);
+                return;
+              }
+              
+              // For code agents, continue with code execution below
+              code = finalResult.code || '';
+              thinkingProcess = thinkingData;
+              break;
+            } else if (chunk.type === 'error') {
+              console.error('[Stream] Error:', chunk.data);
+              const errorMsg: ExtendedMessage = {
+                id: uuidv4(),
+                content: `Error: ${chunk.data.error || 'Streaming failed'}`,
+                type: 'ai',
+                timestamp: new Date()
+              };
+              addMessage(errorMsg);
+              setIsLoading(false);
+              return;
+            }
+          }
+          
+          // If we got a complete result, continue with normal flow
+          if (finalResult && finalResult.type === 'code') {
+            // Update placeholder message with final code result using fresh session
+            const currentSession = getActiveSession();
+            if (placeholderMessageId && currentSession && currentSession.id === activeSessionId) {
+              const finalThinkingProcess = convertThinkingData(finalResult.thinkingProcess, true);
+              // Handle empty code case - preserve message with thinking process
+              const messageContent = finalResult.code && finalResult.code.trim()
+                ? `Generated code for: "${text}". Executing...`
+                : `I couldn't generate valid code for: "${text}". ${finalThinkingProcess ? 'See my thinking process above for details.' : ''}`;
+              
+              updateMessageWithFreshSession((msg: ExtendedMessage) => ({
+                ...msg,
+                content: messageContent,
+                thinkingProcess: finalThinkingProcess || msg.thinkingProcess
+              }));
+              messageAlreadyUpdated = true; // Mark that we've updated the message
+            }
+            // Continue to code execution below (code variable is already set)
+            // If code is empty, execution will be skipped but message is preserved
+          } else if (finalResult && finalResult.type === 'text') {
+            // Already handled above, return early
+            setIsLoading(false);
+            return;
+          } else {
+            // Stream completed but no final result - this shouldn't happen
+            console.warn('[Stream] Stream completed without final result');
+            setIsLoading(false);
+            return;
+          }
+        } catch (streamError: any) {
+          console.error('[Stream] Streaming failed, falling back to regular API:', streamError);
+          setIsLoading(false);
+          // Fall through to regular API call
+        } finally {
+          // Ensure loading is cleared even if we break out of the loop
+          // (though we should have already cleared it in all return paths)
+        }
+      }
+      
+      // Regular (non-streaming) API call
       try {
-        const payload = {
-          input: text,
-          currentCode,
-          history: messages.slice(-6).map(m => ({ type: m.type, content: m.content })),
-          selection: selections.length > 0 ? selections[0] : null, // First selection for backward compatibility
-          selections: selections, // Full selections array for new multi-selection support
-          agentId: agentSettings.selectedAgentId || undefined, // Only send if manually selected
-          model: agentSettings.selectedModel || undefined, // Only send if manually selected
-        };
-        console.log('[AI] route:request', payload);
-        console.log('[DEBUG] currentCode length:', currentCode?.length || 0);
-        console.log('[DEBUG] selections count:', selections.length);
-        console.log('[DEBUG] selections:', selections);
         const response = await api.post('/agents/route', payload);
         console.log('[AI] route:response', response?.data);
         
@@ -1136,7 +1386,9 @@ try {
         }
         if (agentType === 'text') {
           const aiText = response.data?.text || 'Okay.';
-          console.log('[AI] route:text', { text: aiText?.slice?.(0, 400) });
+          // Mark as complete since we have the full response
+          thinkingProcess = convertThinkingData(response.data?.thinkingProcess, true);
+          console.log('[AI] route:text', { text: aiText?.slice?.(0, 400), hasThinking: !!thinkingProcess });
           
           // Check if this is an AlphaFold response
           if (agentId === 'alphafold-agent') {
@@ -1236,17 +1488,39 @@ try {
           // Bio-chat and other text agents should never modify the editor code
           console.log(`[${agentId}] Text response received, preserving current editor code`);
           
-          const chatMsg: Message = {
-            id: uuidv4(),
-            content: aiText,
-            type: 'ai',
-            timestamp: new Date()
-          };
-          addMessage(chatMsg);
+          // Update placeholder message or create new one
+          if (placeholderMessageId && activeSession) {
+            const updatedMessages = activeSession.messages.map(msg => 
+              msg.id === placeholderMessageId
+                ? { 
+                    ...msg, 
+                    content: aiText,
+                    thinkingProcess: thinkingProcess || (msg as ExtendedMessage).thinkingProcess
+                  } as ExtendedMessage
+                : msg
+            );
+            updateMessages(updatedMessages);
+          } else {
+            const chatMsg: ExtendedMessage = {
+              id: uuidv4(),
+              content: aiText,
+              type: 'ai',
+              timestamp: new Date()
+            };
+            
+            // Add thinking process if available
+            if (thinkingProcess) {
+              chatMsg.thinkingProcess = thinkingProcess;
+            }
+            
+            addMessage(chatMsg);
+          }
           return; // Exit early - no code generation or execution
         }
         code = response.data?.code || '';
-        console.log('[AI] route:code', { length: code?.length });
+        // Mark as complete since we have the full response
+        thinkingProcess = convertThinkingData(response.data?.thinkingProcess, true);
+        console.log('[AI] route:code', { length: code?.length, hasThinking: !!thinkingProcess });
       } catch (apiErr) {
         console.warn('AI generation failed (backend unavailable or error).', apiErr);
         const likelyVis = isLikelyVisualization(text);
@@ -1284,29 +1558,77 @@ try {
         console.log('[ChatPanel] Saved visualization code to session:', activeSessionId);
       }
 
-      const aiResponse: Message = {
-        id: uuidv4(),
-        content: `Generated code for: "${text}". Executing...`,
-        type: 'ai',
-        timestamp: new Date()
-      };
-      addMessage(aiResponse);
+      // Update placeholder message or create new one
+      // Mark thinking process as complete now that we have the full response
+      // Skip if message was already updated during streaming
+      if (!messageAlreadyUpdated) {
+        const currentSession = getActiveSession();
+        if (placeholderMessageId && currentSession && currentSession.id === activeSessionId) {
+          const finalThinkingProcess = thinkingProcess 
+            ? convertThinkingData({ 
+                steps: thinkingProcess.steps, 
+                isComplete: true, 
+                totalSteps: thinkingProcess.totalSteps 
+              }, true)
+            : (currentSession.messages.find(m => m.id === placeholderMessageId) as ExtendedMessage)?.thinkingProcess;
+          
+          // Determine message content based on whether code is empty
+          const messageContent = code && code.trim()
+            ? `Generated code for: "${text}". Executing...`
+            : `I couldn't generate valid code for: "${text}". ${thinkingProcess ? 'See my thinking process above for details.' : ''}`;
+          
+          const updatedMessages = currentSession.messages.map(msg => 
+            msg.id === placeholderMessageId
+              ? { 
+                  ...msg, 
+                  content: messageContent,
+                  thinkingProcess: finalThinkingProcess
+                } as ExtendedMessage
+              : msg
+          );
+          updateMessages(updatedMessages);
+        } else {
+          const messageContent = code && code.trim()
+            ? `Generated code for: "${text}". Executing...`
+            : `I couldn't generate valid code for: "${text}".`;
+          
+          const aiResponse: ExtendedMessage = {
+            id: uuidv4(),
+            content: messageContent,
+            type: 'ai',
+            timestamp: new Date()
+          };
+          
+          // Add thinking process if available
+          if (thinkingProcess) {
+            aiResponse.thinkingProcess = thinkingProcess;
+          }
+          
+          addMessage(aiResponse);
+        }
+      }
 
-      if (plugin) {
-        setIsExecuting(true);
-        try {
-          const exec = new CodeExecutor(plugin);
-          await exec.executeCode(code);
+      // Only execute code if it's not empty
+      if (code && code.trim()) {
+        if (plugin) {
+          setIsExecuting(true);
+          try {
+            const exec = new CodeExecutor(plugin);
+            await exec.executeCode(code);
+            setViewerVisibleAndSave(true);
+            setActivePane('viewer');
+          } finally {
+            setIsExecuting(false);
+          }
+        } else {
+          // If no plugin yet, queue code to run once viewer initializes
+          setPendingCodeToRun(code);
           setViewerVisibleAndSave(true);
           setActivePane('viewer');
-        } finally {
-          setIsExecuting(false);
         }
       } else {
-        // If no plugin yet, queue code to run once viewer initializes
-        setPendingCodeToRun(code);
-        setViewerVisibleAndSave(true);
-        setActivePane('viewer');
+        // Code is empty - message is already updated above, just ensure loading is cleared
+        console.warn('[ChatPanel] Empty code received, skipping execution');
       }
     } catch (err) {
       console.error('[Molstar] chat flow failed', err);
@@ -1318,6 +1640,7 @@ try {
       };
       addMessage(aiError);
     } finally {
+      // Always clear loading state, even if streaming or regular API call fails
       setIsLoading(false);
     }
   };
@@ -1372,6 +1695,13 @@ try {
             >
               {message.type === 'ai' ? (
                 <>
+                  {message.thinkingProcess && isThinkingModelSelected && (
+                    <ThinkingProcessDisplay
+                      thinkingSteps={message.thinkingProcess.steps}
+                      isProcessing={!message.thinkingProcess.isComplete}
+                      currentStep={message.thinkingProcess.steps.findIndex(s => s.status === 'processing') + 1}
+                    />
+                  )}
                   {renderMessageContent(message.content)}
                   {renderAlphaFoldResult(message.alphafoldResult)}
                   {renderProteinMPNNResult(message.proteinmpnnResult)}

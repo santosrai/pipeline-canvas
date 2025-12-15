@@ -45,12 +45,12 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.errors import RateLimitExceeded
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 try:
     from .agents import agents, list_agents
     from .router_graph import init_router, routerGraph
-    from .runner import run_agent
+    from .runner import run_agent, run_agent_stream
     from .utils import log_line, spell_fix
     from .alphafold_handler import alphafold_handler
     from .rfdiffusion_handler import rfdiffusion_handler
@@ -64,7 +64,7 @@ except ImportError:
         sys.path.insert(0, current_dir)
     from agents import agents, list_agents
     from router_graph import init_router, routerGraph
-    from runner import run_agent
+    from runner import run_agent, run_agent_stream
     from utils import log_line, spell_fix
     from alphafold_handler import alphafold_handler
     from rfdiffusion_handler import rfdiffusion_handler
@@ -280,6 +280,113 @@ async def route(request: Request):
     except Exception as e:
         log_line("agent_route_failed", {"error": str(e), "trace": traceback.format_exc()})
         content = {"error": "agent_route_failed"}
+        if DEBUG_API:
+            content["detail"] = str(e)
+        return JSONResponse(status_code=500, content=content)
+
+
+@app.post("/api/agents/route-stream")
+@limiter.limit("60/minute")
+async def route_stream(request: Request):
+    """Streaming endpoint for thinking models that yields incremental updates."""
+    try:
+        body = await request.json()
+        input_text = body.get("input")
+        if not isinstance(input_text, str):
+            return JSONResponse(status_code=400, content={"error": "invalid_input"})
+        input_text = spell_fix(input_text)
+
+        # Check for manual agent override
+        manual_agent_id = body.get("agentId")
+        model_override = body.get("model")
+        
+        # Log the input for debugging
+        log_line("agent_route_stream_input", {
+            "input": input_text,
+            "input_length": len(input_text),
+            "has_selection": bool(body.get("selection")),
+            "has_code": bool(body.get("currentCode")),
+            "manual_agent": manual_agent_id,
+            "model_override": model_override
+        })
+        
+        # If agentId is provided, skip routing and use specified agent
+        if manual_agent_id:
+            if manual_agent_id not in agents:
+                return JSONResponse(status_code=400, content={"error": "invalid_agent_id", "agentId": manual_agent_id})
+            agent_id = manual_agent_id
+            reason = f"Manually selected: {agents[agent_id].get('name', agent_id)}"
+        else:
+            # Use router to determine agent
+            routed = await routerGraph.ainvoke(
+                {
+                    "input": input_text,
+                    "selection": body.get("selection"),
+                    "selections": body.get("selections"),
+                    "currentCode": body.get("currentCode"),
+                    "history": body.get("history"),
+                }
+            )
+            agent_id = routed.get("routedAgentId")
+            reason = routed.get("reason")
+        
+        log_line("agent_route_stream_result", {
+            "input": input_text,
+            "agentId": agent_id,
+            "reason": reason,
+            "manual_override": bool(manual_agent_id)
+        })
+        
+        if not agent_id:
+            return JSONResponse(status_code=400, content={"error": "router_no_decision", "reason": reason})
+        
+        log_line("agent_stream_executing", {
+            "agentId": agent_id,
+            "agent_kind": agents[agent_id].get("kind"),
+            "input": input_text,
+            "model_override": model_override
+        })
+        
+        async def generate_stream():
+            try:
+                async for chunk in run_agent_stream(
+                    agent=agents[agent_id],
+                    user_text=input_text,
+                    current_code=body.get("currentCode"),
+                    history=body.get("history"),
+                    selection=body.get("selection"),
+                    selections=body.get("selections"),
+                    model_override=model_override,
+                ):
+                    # Format chunk as JSON line
+                    chunk_data = {
+                        "type": chunk["type"],
+                        "data": chunk["data"]
+                    }
+                    # Add agentId and reason to complete message
+                    if chunk["type"] == "complete":
+                        chunk_data["data"]["agentId"] = agent_id
+                        chunk_data["data"]["reason"] = reason
+                    
+                    yield json.dumps(chunk_data) + "\n"
+            except Exception as e:
+                log_line("agent_stream_failed", {"error": str(e), "trace": traceback.format_exc()})
+                error_chunk = {
+                    "type": "error",
+                    "data": {
+                        "error": "agent_stream_failed",
+                        "detail": str(e) if DEBUG_API else None
+                    }
+                }
+                yield json.dumps(error_chunk) + "\n"
+        
+        return StreamingResponse(
+            generate_stream(),
+            media_type="application/x-ndjson"  # Newline-delimited JSON
+        )
+    except Exception as e:
+        log_line("agent_route_stream_failed", {"error": str(e), "trace": traceback.format_exc()})
+        content = {"error": "agent_route_stream_failed"}
         if DEBUG_API:
             content["detail"] = str(e)
         return JSONResponse(status_code=500, content=content)

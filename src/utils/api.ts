@@ -80,3 +80,126 @@ export async function fetchAgents(): Promise<Agent[]> {
   }
 }
 
+export interface StreamChunk {
+  type: 'thinking_step' | 'content' | 'complete' | 'error';
+  data: any;
+}
+
+/**
+ * Stream agent route responses for thinking models.
+ * Yields chunks as they arrive from the server.
+ */
+export async function* streamAgentRoute(payload: {
+  input: string;
+  currentCode?: string;
+  history?: Array<{ type: string; content: string }>;
+  selection?: any;
+  selections?: any[];
+  agentId?: string;
+  model?: string;
+}): AsyncGenerator<StreamChunk, void, unknown> {
+  // Get API key from localStorage
+  let apiKey: string | undefined;
+  try {
+    const storageItem = localStorage.getItem('novoprotein-settings-storage');
+    if (storageItem) {
+      const { state } = JSON.parse(storageItem);
+      apiKey = state?.settings?.api?.key;
+    }
+  } catch (e) {
+    console.warn('Failed to read API key from storage', e);
+  }
+
+  // Build headers
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (apiKey) {
+    headers['x-api-key'] = apiKey;
+  }
+
+  // Make streaming request
+  const response = await fetch(`${baseURL}/agents/route-stream`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    yield {
+      type: 'error',
+      data: { error: errorData.error || 'Request failed', detail: errorData.detail },
+    };
+    return;
+  }
+
+  // Read stream
+  const reader = response.body?.getReader();
+  if (!reader) {
+    yield {
+      type: 'error',
+      data: { error: 'No response body' },
+    };
+    return;
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) {
+        break;
+      }
+
+      // Decode chunk and add to buffer
+      buffer += decoder.decode(value, { stream: true });
+
+      // Process complete lines (newline-delimited JSON)
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          continue;
+        }
+
+        try {
+          const chunk: StreamChunk = JSON.parse(trimmed);
+          yield chunk;
+
+          // If we get a complete or error, we're done
+          if (chunk.type === 'complete' || chunk.type === 'error') {
+            return;
+          }
+        } catch (e) {
+          console.warn('[Stream] Failed to parse chunk:', trimmed, e);
+          // Continue processing other chunks
+        }
+      }
+    }
+
+    // Process any remaining buffer
+    if (buffer.trim()) {
+      try {
+        const chunk: StreamChunk = JSON.parse(buffer.trim());
+        yield chunk;
+      } catch (e) {
+        console.warn('[Stream] Failed to parse final chunk:', buffer, e);
+      }
+    }
+  } catch (error: any) {
+    console.error('[Stream] Error reading stream:', error);
+    yield {
+      type: 'error',
+      data: { error: 'Stream read error', detail: error.message },
+    };
+  } finally {
+    reader.releaseLock();
+  }
+}
+
