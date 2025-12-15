@@ -219,6 +219,9 @@ export const ChatPanel: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previousSessionIdRef = useRef<string | null>(null);
+  // Refs to track latest values for session switching (avoid stale closures)
+  const currentCodeRef = useRef<string | null>(currentCode);
+  const isViewerVisibleRef = useRef<boolean>(isViewerVisible);
 
   // Initialize session if none exists
   useEffect(() => {
@@ -239,20 +242,30 @@ export const ChatPanel: React.FC = () => {
     }
   }, [activeSessionId, getViewerVisibility, setViewerVisible]);
 
+  // Keep refs updated with latest values (prevents stale closures)
+  useEffect(() => {
+    currentCodeRef.current = currentCode;
+  }, [currentCode]);
+
+  useEffect(() => {
+    isViewerVisibleRef.current = isViewerVisible;
+  }, [isViewerVisible]);
+
   // Restore visualization code and viewer visibility when switching sessions
   useEffect(() => {
     if (!activeSessionId) return;
     
     // Save current state to previous session before switching
+    // Use refs to ensure we have the latest values even if they changed after effect was scheduled
     if (previousSessionIdRef.current && previousSessionIdRef.current !== activeSessionId) {
-      const codeToSave = currentCode?.trim() || '';
+      const codeToSave = currentCodeRef.current?.trim() || '';
       if (codeToSave) {
         saveVisualizationCode(previousSessionIdRef.current, codeToSave);
         console.log('[ChatPanel] Saved code to previous session:', previousSessionIdRef.current);
       }
       // Save viewer visibility to previous session
-      saveViewerVisibility(previousSessionIdRef.current, isViewerVisible);
-      console.log('[ChatPanel] Saved viewer visibility to previous session:', previousSessionIdRef.current, isViewerVisible);
+      saveViewerVisibility(previousSessionIdRef.current, isViewerVisibleRef.current);
+      console.log('[ChatPanel] Saved viewer visibility to previous session:', previousSessionIdRef.current, isViewerVisibleRef.current);
     }
     
     // Restore code for new session
@@ -262,7 +275,8 @@ export const ChatPanel: React.FC = () => {
       setCurrentCode(savedCode);
     } else {
       // Clear code if session has no saved visualization
-      if (currentCode && currentCode.trim()) {
+      // Use ref to check current state
+      if (currentCodeRef.current && currentCodeRef.current.trim()) {
         console.log('[ChatPanel] Clearing code for session without visualization:', activeSessionId);
         setCurrentCode('');
       }
@@ -280,8 +294,7 @@ export const ChatPanel: React.FC = () => {
     
     // Update previous session ID
     previousSessionIdRef.current = activeSessionId;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSessionId, getVisualizationCode, saveVisualizationCode, getViewerVisibility, saveViewerVisibility]);
+  }, [activeSessionId, getVisualizationCode, saveVisualizationCode, getViewerVisibility, saveViewerVisibility, setCurrentCode, setViewerVisible]);
 
   // Fetch agents and models on mount
   useEffect(() => {
