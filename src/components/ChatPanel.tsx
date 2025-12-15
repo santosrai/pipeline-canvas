@@ -18,7 +18,9 @@ import { useAgentSettings } from '../stores/settingsStore';
 import { ThinkingProcessDisplay } from './ThinkingProcessDisplay';
 
 // Extended message metadata for structured agent results
+// Note: Message interface now includes thinkingProcess, so ExtendedMessage is mainly for type compatibility
 interface ExtendedMessage extends Message {
+  // These fields are now part of Message interface, but keeping for backward compatibility
   alphafoldResult?: {
     pdbContent?: string;
     filename?: string;
@@ -41,17 +43,7 @@ interface ExtendedMessage extends Message {
     };
     metadata?: Record<string, any>;
   };
-  thinkingProcess?: {
-    steps: Array<{
-      id: string;
-      title: string;
-      content: string;
-      status: 'pending' | 'processing' | 'completed';
-      timestamp?: Date;
-    }>;
-    isComplete: boolean;
-    totalSteps: number;
-  };
+  // thinkingProcess is now in Message interface, but keeping here for type compatibility
   error?: ErrorDetails;
 }
 
@@ -243,7 +235,7 @@ export const ChatPanel: React.FC = () => {
   const clearSelections = useAppStore(state => state.clearSelections);
 
   // Chat history store
-  const { createSession, activeSessionId, saveVisualizationCode, getVisualizationCode, saveViewerVisibility, getViewerVisibility, getActiveSession } = useChatHistoryStore();
+  const { createSession, activeSessionId, saveVisualizationCode, getVisualizationCode, saveViewerVisibility, getViewerVisibility, getActiveSession, saveModelSettings, getModelSettings } = useChatHistoryStore();
   const isViewerVisible = useAppStore(state => state.isViewerVisible);
   
   // Helper function to set viewer visibility and save to session
@@ -256,7 +248,7 @@ export const ChatPanel: React.FC = () => {
   const { activeSession, addMessage, updateMessages } = useActiveSession();
 
   // Agent and model settings
-  const { settings: agentSettings } = useAgentSettings();
+  const { settings: agentSettings, updateSettings: updateAgentSettings } = useAgentSettings();
   
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -267,6 +259,8 @@ export const ChatPanel: React.FC = () => {
   // Refs to track latest values for session switching (avoid stale closures)
   const currentCodeRef = useRef<string | null>(currentCode);
   const isViewerVisibleRef = useRef<boolean>(isViewerVisible);
+  // Ref to prevent saving during restoration
+  const isRestoringRef = useRef(false);
 
   // Initialize session if none exists
   useEffect(() => {
@@ -300,9 +294,12 @@ export const ChatPanel: React.FC = () => {
   useEffect(() => {
     if (!activeSessionId) return;
     
+    // Only restore when session actually changes (not when settings change)
+    const sessionChanged = previousSessionIdRef.current !== activeSessionId;
+    
     // Save current state to previous session before switching
     // Use refs to ensure we have the latest values even if they changed after effect was scheduled
-    if (previousSessionIdRef.current && previousSessionIdRef.current !== activeSessionId) {
+    if (previousSessionIdRef.current && sessionChanged) {
       const codeToSave = currentCodeRef.current?.trim() || '';
       if (codeToSave) {
         saveVisualizationCode(previousSessionIdRef.current, codeToSave);
@@ -311,35 +308,98 @@ export const ChatPanel: React.FC = () => {
       // Save viewer visibility to previous session
       saveViewerVisibility(previousSessionIdRef.current, isViewerVisibleRef.current);
       console.log('[ChatPanel] Saved viewer visibility to previous session:', previousSessionIdRef.current, isViewerVisibleRef.current);
+      // Save model settings to previous session
+      saveModelSettings(
+        previousSessionIdRef.current,
+        agentSettings.selectedAgentId,
+        agentSettings.selectedModel
+      );
+      console.log('[ChatPanel] Saved model settings to previous session:', previousSessionIdRef.current, {
+        selectedAgentId: agentSettings.selectedAgentId,
+        selectedModel: agentSettings.selectedModel,
+      });
     }
     
-    // Restore code for new session
-    const savedCode = getVisualizationCode(activeSessionId);
-    if (savedCode && savedCode.trim()) {
-      console.log('[ChatPanel] Restoring visualization code for session:', activeSessionId);
-      setCurrentCode(savedCode);
-    } else {
-      // Clear code if session has no saved visualization
-      // Use ref to check current state
-      if (currentCodeRef.current && currentCodeRef.current.trim()) {
-        console.log('[ChatPanel] Clearing code for session without visualization:', activeSessionId);
-        setCurrentCode('');
+    // Only restore when session changes
+    if (sessionChanged) {
+      // Restore code for new session
+      const savedCode = getVisualizationCode(activeSessionId);
+      if (savedCode && savedCode.trim()) {
+        console.log('[ChatPanel] Restoring visualization code for session:', activeSessionId);
+        setCurrentCode(savedCode);
+      } else {
+        // Clear code if session has no saved visualization
+        // Use ref to check current state
+        if (currentCodeRef.current && currentCodeRef.current.trim()) {
+          console.log('[ChatPanel] Clearing code for session without visualization:', activeSessionId);
+          setCurrentCode('');
+        }
       }
+      
+      // Restore viewer visibility for new session
+      const savedVisibility = getViewerVisibility(activeSessionId);
+      if (savedVisibility !== undefined) {
+        console.log('[ChatPanel] Restoring viewer visibility for session:', activeSessionId, savedVisibility);
+        setViewerVisible(savedVisibility);
+      } else {
+        // Default to hidden for new sessions
+        setViewerVisible(false);
+      }
+      
+      // Restore model settings for new session
+      const savedModelSettings = getModelSettings(activeSessionId);
+      if (savedModelSettings) {
+        console.log('[ChatPanel] Restoring model settings for session:', activeSessionId, savedModelSettings);
+        isRestoringRef.current = true;
+        updateAgentSettings({
+          selectedAgentId: savedModelSettings.selectedAgentId,
+          selectedModel: savedModelSettings.selectedModel,
+        });
+        // Reset flag in next tick to allow the update to complete
+        Promise.resolve().then(() => {
+          setTimeout(() => {
+            isRestoringRef.current = false;
+          }, 50);
+        });
+      } else {
+        // For new sessions, keep current global settings (or use defaults)
+        console.log('[ChatPanel] No saved model settings for session, using current settings:', activeSessionId);
+        // Don't set restoring flag here - we want to save the current settings
+        saveModelSettings(
+          activeSessionId,
+          agentSettings.selectedAgentId,
+          agentSettings.selectedModel
+        );
+      }
+      
+      // Update previous session ID
+      previousSessionIdRef.current = activeSessionId;
     }
-    
-    // Restore viewer visibility for new session
-    const savedVisibility = getViewerVisibility(activeSessionId);
-    if (savedVisibility !== undefined) {
-      console.log('[ChatPanel] Restoring viewer visibility for session:', activeSessionId, savedVisibility);
-      setViewerVisible(savedVisibility);
-    } else {
-      // Default to hidden for new sessions
-      setViewerVisible(false);
+  }, [activeSessionId, getVisualizationCode, saveVisualizationCode, getViewerVisibility, saveViewerVisibility, setCurrentCode, setViewerVisible, saveModelSettings, getModelSettings, updateAgentSettings]);
+
+  // Save model settings when they change (for current session)
+  // Skip saving during initial session switch to avoid overwriting restored settings
+  useEffect(() => {
+    // Only save if we have an active session and not currently restoring
+    if (activeSessionId && !isRestoringRef.current) {
+      // Use requestAnimationFrame to ensure this runs after any restoration updates
+      const rafId = requestAnimationFrame(() => {
+        if (!isRestoringRef.current && activeSessionId) {
+          saveModelSettings(
+            activeSessionId,
+            agentSettings.selectedAgentId,
+            agentSettings.selectedModel
+          );
+          console.log('[ChatPanel] Saved model settings for current session:', activeSessionId, {
+            selectedAgentId: agentSettings.selectedAgentId,
+            selectedModel: agentSettings.selectedModel,
+          });
+        }
+      });
+      
+      return () => cancelAnimationFrame(rafId);
     }
-    
-    // Update previous session ID
-    previousSessionIdRef.current = activeSessionId;
-  }, [activeSessionId, getVisualizationCode, saveVisualizationCode, getViewerVisibility, saveViewerVisibility, setCurrentCode, setViewerVisible]);
+  }, [activeSessionId, agentSettings.selectedAgentId, agentSettings.selectedModel, saveModelSettings]);
 
   // Fetch agents and models on mount
   useEffect(() => {

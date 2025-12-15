@@ -2,12 +2,52 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { api } from '../utils/api';
+import { ErrorDetails } from '../utils/errorHandler';
+
+export interface ThinkingStep {
+  id: string;
+  title: string;
+  content: string;
+  status: 'pending' | 'processing' | 'completed';
+  timestamp?: Date;
+}
+
+export interface ThinkingProcess {
+  steps: ThinkingStep[];
+  isComplete: boolean;
+  totalSteps: number;
+}
 
 export interface Message {
   id: string;
   content: string;
   type: 'user' | 'ai';
   timestamp: Date;
+  // Extended fields for AI messages
+  thinkingProcess?: ThinkingProcess;
+  alphafoldResult?: {
+    pdbContent?: string;
+    filename?: string;
+    sequence?: string;
+    parameters?: any;
+    metadata?: any;
+  };
+  proteinmpnnResult?: {
+    jobId: string;
+    sequences: Array<{
+      id: string;
+      sequence: string;
+      length: number;
+      metadata?: Record<string, any>;
+    }>;
+    downloads: {
+      json: string;
+      fasta: string;
+      raw?: string;
+    };
+    metadata?: Record<string, any>;
+  };
+  error?: ErrorDetails;
 }
 
 export interface ChatSession {
@@ -24,6 +64,9 @@ export interface ChatSession {
     starred?: boolean;
     agentContext?: string; // Last agent used, PDB context, etc.
     tags?: string[];
+    // Model settings per session
+    selectedAgentId?: string | null; // null = auto-route
+    selectedModel?: string | null; // null = use agent default
   };
 }
 
@@ -65,6 +108,10 @@ interface ChatHistoryState {
   // Viewer Visibility Management
   saveViewerVisibility: (sessionId: string, visible: boolean) => void;
   getViewerVisibility: (sessionId: string) => boolean | undefined;
+  
+  // Model Settings Management (per session)
+  saveModelSettings: (sessionId: string, selectedAgentId: string | null, selectedModel: string | null) => void;
+  getModelSettings: (sessionId: string) => { selectedAgentId: string | null; selectedModel: string | null } | undefined;
   
   // Utility Actions
   getActiveSession: () => ChatSession | null;
@@ -221,6 +268,34 @@ export const useChatHistoryStore = create<ChatHistoryState>()(
         const { sessions } = get();
         const session = sessions.find(s => s.id === sessionId);
         return session?.isViewerVisible;
+      },
+      
+      saveModelSettings: (sessionId, selectedAgentId, selectedModel) => {
+        set((state) => ({
+          sessions: state.sessions.map(session =>
+            session.id === sessionId
+              ? {
+                  ...session,
+                  metadata: {
+                    ...session.metadata,
+                    selectedAgentId,
+                    selectedModel,
+                  },
+                  lastModified: new Date()
+                }
+              : session
+          )
+        }));
+      },
+      
+      getModelSettings: (sessionId) => {
+        const { sessions } = get();
+        const session = sessions.find(s => s.id === sessionId);
+        if (!session) return undefined;
+        return {
+          selectedAgentId: session.metadata.selectedAgentId ?? null,
+          selectedModel: session.metadata.selectedModel ?? null,
+        };
       },
       
       deleteSession: (sessionId) => {
@@ -587,10 +662,30 @@ export const useChatHistoryStore = create<ChatHistoryState>()(
               ...session.metadata,
               lastActivity: ensureDate(session.metadata.lastActivity),
             },
-            messages: session.messages.map((message: any) => ({
-              ...message,
-              timestamp: ensureDate(message.timestamp),
-            })),
+            messages: session.messages.map((message: any) => {
+              const msg: any = {
+                ...message,
+                timestamp: ensureDate(message.timestamp),
+              };
+              // Handle thinkingProcess dates
+              if (message.thinkingProcess && message.thinkingProcess.steps) {
+                msg.thinkingProcess = {
+                  ...message.thinkingProcess,
+                  steps: message.thinkingProcess.steps.map((step: any) => ({
+                    ...step,
+                    timestamp: step.timestamp ? ensureDate(step.timestamp) : undefined,
+                  })),
+                };
+              }
+              // Handle error timestamp
+              if (message.error && message.error.timestamp) {
+                msg.error = {
+                  ...message.error,
+                  timestamp: ensureDate(message.error.timestamp),
+                };
+              }
+              return msg;
+            }),
           }));
         }
         
