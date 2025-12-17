@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { api } from './api';
 
 export interface PDBSearchResult {
   identifier: string;
@@ -80,4 +81,55 @@ export const getPDBUrl = (pdbId: string): string => {
 
 export const validatePDBId = (pdbId: string): boolean => {
   return /^[0-9][A-Za-z0-9]{3}$/.test(pdbId);
+};
+
+/**
+ * Extracts PDB ID or name from text
+ * Returns the PDB ID if found, or null otherwise
+ */
+export const extractPDBFromText = async (text: string): Promise<string | null> => {
+  // Check for explicit PDB ID pattern (e.g., "PDB:1ABC", "1ABC", "pdb 1ABC")
+  const pdbIdPattern = /(?:pdb[:\s]*)?([0-9][A-Za-z0-9]{3})/i;
+  const pdbIdMatch = text.match(pdbIdPattern);
+  if (pdbIdMatch) {
+    return pdbIdMatch[1].toUpperCase();
+  }
+
+  // Check for common protein names
+  const pdbId = await resolvePDBFromName(text);
+  if (pdbId) {
+    return pdbId;
+  }
+
+  return null;
+};
+
+/**
+ * Generates an AI summary for a PDB ID or PDB-related text
+ * Returns the summary or null if generation fails
+ */
+export const generatePDBSummary = async (text: string): Promise<string | null> => {
+  try {
+    // Extract PDB ID or name from text
+    const pdbId = await extractPDBFromText(text);
+    if (!pdbId) {
+      return null;
+    }
+
+    // Call bio-chat agent to generate summary
+    const response = await api.post('/agents/route', {
+      input: `Provide a concise summary of PDB ${pdbId}. Include its biological function, structure type, and key features.`,
+      agentId: 'bio-chat',
+    });
+
+    // Handle response structure: route endpoint returns {agentId, type, text, reason}
+    if (response.data?.text) {
+      return response.data.text;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Failed to generate PDB summary:', error);
+    return null;
+  }
 };

@@ -8,6 +8,7 @@ import { PluginSpec } from 'molstar/lib/mol-plugin/spec';
 import { MolViewSpec } from 'molstar/lib/extensions/mvs/behavior';
 import { Camera, FullscreenIcon, RotateCw } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
+import { useChatHistoryStore } from '../stores/chatHistoryStore';
 import { StructureElement, StructureProperties } from 'molstar/lib/mol-model/structure';
 // OrderedSet no longer needed after switching to getFirstLocation
 import { CodeExecutor } from '../utils/codeExecutor';
@@ -18,13 +19,59 @@ export const MolstarViewer: React.FC = () => {
   const [plugin, setPlugin] = useState<PluginUIContext | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const { setPlugin: setStorePlugin, pendingCodeToRun, setPendingCodeToRun, setActivePane, setIsExecuting, currentCode } = useAppStore();
+  const [hasCheckedPersistedCode, setHasCheckedPersistedCode] = useState(false);
+  const { setPlugin: setStorePlugin, pendingCodeToRun, setPendingCodeToRun, setActivePane, setIsExecuting, currentCode, setCurrentCode } = useAppStore();
   const addSelection = useAppStore(state => state.addSelection);
   const lastLoadedPdb = useAppStore(state => state.lastLoadedPdb);
+  const { activeSessionId, getVisualizationCode } = useChatHistoryStore();
+
+  // Helper function to get the code to execute (checks both global and session-specific)
+  const getCodeToExecute = (): string | null => {
+    // First check global currentCode
+    if (currentCode && currentCode.trim()) {
+      return currentCode;
+    }
+    
+    // Then check session-specific visualization code
+    if (activeSessionId) {
+      const sessionCode = getVisualizationCode(activeSessionId);
+      if (sessionCode && sessionCode.trim()) {
+        return sessionCode;
+      }
+    }
+    
+    return null;
+  };
+
+  // Check for persisted code on mount (after stores have hydrated)
+  useEffect(() => {
+    // Give stores a moment to hydrate from localStorage
+    const checkPersistedCode = () => {
+      const code = getCodeToExecute();
+      if (code) {
+        // If we found persisted code, update the store so it's available
+        if (!currentCode || currentCode.trim() === '') {
+          setCurrentCode(code);
+          console.log('[Molstar] Restored persisted visualization code');
+        }
+      }
+      setHasCheckedPersistedCode(true);
+    };
+
+    // Small delay to ensure Zustand persistence has hydrated
+    const timer = setTimeout(checkPersistedCode, 150);
+    return () => clearTimeout(timer);
+  }, []); // Only run once on mount
 
   useEffect(() => {
     const initViewer = async () => {
       if (!containerRef.current || isInitialized) return;
+      
+      // Wait for persisted code check to complete before initializing
+      if (!hasCheckedPersistedCode) {
+        console.log('[Molstar] Waiting for persisted code check...');
+        return;
+      }
 
       try {
         setIsLoading(true);
@@ -106,15 +153,21 @@ export const MolstarViewer: React.FC = () => {
           return;
         }
 
-        // Priority 2: If there is existing code in the editor, execute it
-        if (currentCode && currentCode.trim()) {
+        // Priority 2: Get code to execute (checks both global and session-specific)
+        const codeToExecute = getCodeToExecute();
+        if (codeToExecute) {
           try {
             setIsExecuting(true);
             const exec = new CodeExecutor(pluginInstance);
-            await exec.executeCode(currentCode);
+            await exec.executeCode(codeToExecute);
+            // Sync to store if it came from session
+            if (!currentCode || currentCode.trim() === '') {
+              setCurrentCode(codeToExecute);
+            }
             setActivePane('viewer');
+            lastExecutedCodeRef.current = codeToExecute;
           } catch (e) {
-            console.error('[Molstar] execute currentCode on mount failed', e);
+            console.error('[Molstar] execute persisted code on mount failed', e);
           } finally {
             setIsExecuting(false);
           }
@@ -148,7 +201,7 @@ export const MolstarViewer: React.FC = () => {
       }
       console.log('[Molstar] cleanup: end');
     };
-  }, []);
+  }, [hasCheckedPersistedCode, activeSessionId]);
 
   const loadDefaultStructure = async (pluginInstance: PluginUIContext) => {
     try {
@@ -205,9 +258,25 @@ export const MolstarViewer: React.FC = () => {
   useEffect(() => {
     const run = async () => {
       if (!plugin || !isInitialized) return;
-      const code = currentCode?.trim();
+      
+      // Get code to execute (checks both global and session-specific)
+      let code = currentCode?.trim();
+      
+      // If no global code, check session-specific code
+      if (!code && activeSessionId) {
+        const sessionCode = getVisualizationCode(activeSessionId);
+        if (sessionCode && sessionCode.trim()) {
+          code = sessionCode;
+          // Sync to store so it's available globally
+          if (!currentCode || currentCode.trim() === '') {
+            setCurrentCode(sessionCode);
+          }
+        }
+      }
+      
       if (!code) return;
       if (lastExecutedCodeRef.current === code) return;
+      
       try {
         setIsExecuting(true);
         const exec = new CodeExecutor(plugin);
@@ -221,7 +290,7 @@ export const MolstarViewer: React.FC = () => {
     };
     void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plugin, isInitialized, currentCode]);
+  }, [plugin, isInitialized, currentCode, activeSessionId]);
 
   const handleScreenshot = async () => {
     if (!plugin) return;

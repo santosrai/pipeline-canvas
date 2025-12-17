@@ -303,5 +303,19 @@
       "D",
       "E"
     ]
+  },
+  "7836a09e5e7448f6b5d1ec8dc472b1f6": {
+    "file_id": "7836a09e5e7448f6b5d1ec8dc472b1f6",
+    "filename": "1R42.pdb",
+    "stored_path": "uploads/pdb/7836a09e5e7448f6b5d1ec8dc472b1f6.pdb",
+    "size": 504711,
+    "atoms": 5511,
+    "chains": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ]
   }
 }

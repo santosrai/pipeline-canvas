@@ -18,6 +18,7 @@ import { useAgentSettings } from '../stores/settingsStore';
 import { ThinkingProcessDisplay } from './ThinkingProcessDisplay';
 import { PDBFileUpload } from './PDBFileUpload';
 import ReactMarkdown from 'react-markdown';
+import { generatePDBSummary } from '../utils/pdbUtils';
 
 // Extended message metadata for structured agent results
 // Note: Message interface now includes thinkingProcess and uploadedFile, so ExtendedMessage is mainly for type compatibility
@@ -1895,13 +1896,32 @@ try {
             if (placeholderMessageId && currentSession && currentSession.id === activeSessionId) {
               const finalThinkingProcess = convertThinkingData(finalResult.thinkingProcess, true);
               // Handle empty code case - preserve message with thinking process
-              const messageContent = finalResult.code && finalResult.code.trim()
+              const defaultMessageContent = finalResult.code && finalResult.code.trim()
                 ? `Generated code for: "${text}". Executing...`
                 : `I couldn't generate valid code for: "${text}". ${finalThinkingProcess ? 'See my thinking process above for details.' : ''}`;
               
+              // Try to generate PDB summary asynchronously
+              generatePDBSummary(text).then(summary => {
+                if (summary) {
+                  const currentSession = getActiveSession();
+                  if (currentSession && currentSession.id === activeSessionId && placeholderMessageId) {
+                    updateMessageWithFreshSession((msg: ExtendedMessage) => 
+                      msg.id === placeholderMessageId ? {
+                        ...msg,
+                        content: summary,
+                        thinkingProcess: finalThinkingProcess || msg.thinkingProcess
+                      } : msg
+                    );
+                  }
+                }
+              }).catch(err => {
+                console.warn('Failed to generate PDB summary:', err);
+              });
+              
+              // Set default message immediately
               updateMessageWithFreshSession((msg: ExtendedMessage) => ({
                 ...msg,
-                content: messageContent,
+                content: defaultMessageContent,
                 thinkingProcess: finalThinkingProcess || msg.thinkingProcess
               }));
               messageAlreadyUpdated = true; // Mark that we've updated the message
@@ -2169,28 +2189,49 @@ try {
             : (currentSession.messages.find(m => m.id === placeholderMessageId) as ExtendedMessage)?.thinkingProcess;
           
           // Determine message content based on whether code is empty
-          const messageContent = code && code.trim()
+          const defaultMessageContent = code && code.trim()
             ? `Generated code for: "${text}". Executing...`
             : `I couldn't generate valid code for: "${text}". ${thinkingProcess ? 'See my thinking process above for details.' : ''}`;
+          
+          // Try to generate PDB summary asynchronously
+          generatePDBSummary(text).then(summary => {
+            if (summary) {
+              const currentSession = getActiveSession();
+              if (currentSession && currentSession.id === activeSessionId && placeholderMessageId) {
+                const updatedMessages = currentSession.messages.map(msg => 
+                  msg.id === placeholderMessageId
+                    ? { 
+                        ...msg, 
+                        content: summary,
+                        thinkingProcess: finalThinkingProcess
+                      } as ExtendedMessage
+                    : msg
+                );
+                updateMessages(updatedMessages);
+              }
+            }
+          }).catch(err => {
+            console.warn('Failed to generate PDB summary:', err);
+          });
           
           const updatedMessages = currentSession.messages.map(msg => 
             msg.id === placeholderMessageId
               ? { 
                   ...msg, 
-                  content: messageContent,
+                  content: defaultMessageContent,
                   thinkingProcess: finalThinkingProcess
                 } as ExtendedMessage
               : msg
           );
           updateMessages(updatedMessages);
         } else {
-          const messageContent = code && code.trim()
+          const defaultMessageContent = code && code.trim()
             ? `Generated code for: "${text}". Executing...`
             : `I couldn't generate valid code for: "${text}".`;
           
           const aiResponse: ExtendedMessage = {
             id: uuidv4(),
-            content: messageContent,
+            content: defaultMessageContent,
             type: 'ai',
             timestamp: new Date()
           };
@@ -2201,6 +2242,26 @@ try {
           }
           
           addMessage(aiResponse);
+          
+          // Try to generate PDB summary asynchronously and update message
+          generatePDBSummary(text).then(summary => {
+            if (summary) {
+              const currentSession = getActiveSession();
+              if (currentSession && currentSession.id === activeSessionId) {
+                const updatedMessages = currentSession.messages.map(msg => 
+                  msg.id === aiResponse.id
+                    ? { 
+                        ...msg, 
+                        content: summary
+                      } as ExtendedMessage
+                    : msg
+                );
+                updateMessages(updatedMessages);
+              }
+            }
+          }).catch(err => {
+            console.warn('Failed to generate PDB summary:', err);
+          });
         }
       }
 

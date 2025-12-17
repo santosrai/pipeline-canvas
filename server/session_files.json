@@ -256,6 +256,24 @@
           "E"
         ]
       }
+    },
+    {
+      "file_id": "7836a09e5e7448f6b5d1ec8dc472b1f6",
+      "type": "upload",
+      "file_path": "uploads/pdb/7836a09e5e7448f6b5d1ec8dc472b1f6.pdb",
+      "filename": "1R42.pdb",
+      "size": 504711,
+      "job_id": null,
+      "metadata": {
+        "atoms": 5511,
+        "chains": [
+          "A",
+          "B",
+          "C",
+          "D",
+          "E"
+        ]
+      }
     }
   ],
   "79896558-d767-4c57-960e-8eba79cc18de": [
