@@ -1,0 +1,62 @@
+{
+  "metadata": {
+    "type": "rfdiffusion_node",
+    "label": "RFdiffusion",
+    "icon": "Sparkles",
+    "color": "#a855f7",
+    "borderColor": "border-purple-500",
+    "bgColor": "bg-purple-500",
+    "description": "De novo backbone design"
+  },
+  "schema": {
+    "contigs": {
+      "type": "string",
+      "required": false,
+      "default": "50",
+      "placeholder": "50",
+      "label": "Contigs",
+      "helpText": "Contig specification (e.g., \"50\" or \"A1-50\")"
+    },
+    "num_designs": {
+      "type": "number",
+      "required": false,
+      "default": 1,
+      "min": 1,
+      "max": 10,
+      "label": "Number of Designs"
+    }
+  },
+  "handles": {
+    "inputs": [
+      {
+        "id": "target",
+        "type": "target",
+        "position": "left",
+        "dataType": "pdb_file"
+      }
+    ],
+    "outputs": [
+      {
+        "id": "source",
+        "type": "source",
+        "position": "right",
+        "dataType": "pdb_file"
+      }
+    ]
+  },
+  "execution": {
+    "type": "api_call",
+    "endpoint": "/rfdiffusion/run",
+    "method": "POST",
+    "payload": {
+      "pdb_file": "{{input.target}}",
+      "contigs": "{{config.contigs}}",
+      "num_designs": "{{config.num_designs}}"
+    }
+  },
+  "defaultConfig": {
+    "contigs": "50",
+    "num_designs": 1
+  }
+}
+

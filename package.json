@@ -1,0 +1,50 @@
+{
+  "name": "@novoprotein/pipeline-canvas",
+  "version": "1.0.0",
+  "description": "Pipeline canvas component library for visual workflow design",
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": {
+      "import": "./index.ts",
+      "types": "./index.ts"
+    },
+    "./components": {
+      "import": "./components/index.ts",
+      "types": "./components/index.ts"
+    },
+    "./types": {
+      "import": "./types/index.ts",
+      "types": "./types/index.ts"
+    },
+    "./store": {
+      "import": "./store/pipelineStore.ts",
+      "types": "./store/pipelineStore.ts"
+    },
+    "./utils": {
+      "import": "./utils/index.ts",
+      "types": "./utils/index.ts"
+    }
+  },
+  "peerDependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "reactflow": "^11.11.4",
+    "zustand": "^4.5.4",
+    "lucide-react": "^0.427.0"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "pipeline",
+    "canvas",
+    "workflow",
+    "react",
+    "reactflow"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+

@@ -1,0 +1,43 @@
+{
+  "metadata": {
+    "type": "input_node",
+    "label": "Input",
+    "icon": "FileInput",
+    "color": "#3b82f6",
+    "borderColor": "border-blue-500",
+    "bgColor": "bg-blue-500",
+    "description": "Upload PDB file"
+  },
+  "schema": {
+    "filename": {
+      "type": "string",
+      "required": false,
+      "default": "",
+      "placeholder": "target.pdb",
+      "label": "Filename",
+      "validation": {
+        "pattern": "\\.pdb$",
+        "message": "Must be a .pdb file"
+      }
+    }
+  },
+  "handles": {
+    "inputs": [],
+    "outputs": [
+      {
+        "id": "source",
+        "type": "source",
+        "position": "right"
+      }
+    ]
+  },
+  "execution": {
+    "type": "file_check",
+    "endpoint": null,
+    "method": "GET"
+  },
+  "defaultConfig": {
+    "filename": ""
+  }
+}
+

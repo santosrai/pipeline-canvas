@@ -1,0 +1,63 @@
+{
+  "metadata": {
+    "type": "proteinmpnn_node",
+    "label": "ProteinMPNN",
+    "icon": "Dna",
+    "color": "#22c55e",
+    "borderColor": "border-green-500",
+    "bgColor": "bg-green-500",
+    "description": "Sequence design"
+  },
+  "schema": {
+    "num_sequences": {
+      "type": "number",
+      "required": false,
+      "default": 8,
+      "min": 1,
+      "max": 100,
+      "label": "Number of Sequences"
+    },
+    "temperature": {
+      "type": "number",
+      "required": false,
+      "default": 0.1,
+      "min": 0.1,
+      "max": 1.0,
+      "step": 0.1,
+      "label": "Temperature"
+    }
+  },
+  "handles": {
+    "inputs": [
+      {
+        "id": "target",
+        "type": "target",
+        "position": "left",
+        "dataType": "pdb_file"
+      }
+    ],
+    "outputs": [
+      {
+        "id": "source",
+        "type": "source",
+        "position": "right",
+        "dataType": "sequence"
+      }
+    ]
+  },
+  "execution": {
+    "type": "api_call",
+    "endpoint": "/proteinmpnn/run",
+    "method": "POST",
+    "payload": {
+      "pdb_file": "{{input.target}}",
+      "num_sequences": "{{config.num_sequences}}",
+      "temperature": "{{config.temperature}}"
+    }
+  },
+  "defaultConfig": {
+    "num_sequences": 8,
+    "temperature": 0.1
+  }
+}
+
