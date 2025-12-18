@@ -72,6 +72,14 @@ The Monaco editor provides a full IDE experience with:
 - `MolstarViewer.tsx` - 3D molecular viewer
 - `utils/molstarBuilder.ts` - Molstar API wrapper
 - `utils/codeExecutor.ts` - Safe code execution environment
+- `components/pipeline-canvas/` - Visual pipeline workflow library (React Flow based)
+
+### Pipeline Canvas Library
+The pipeline canvas is a standalone library located at `src/components/pipeline-canvas/` that provides:
+- **Visual DAG Workflow**: Design and execute protein engineering pipelines
+- **Node Types**: Input, RFdiffusion, ProteinMPNN, and AlphaFold nodes
+- **JSON Configuration**: Each node type has configurable schema in `nodes/*/node.json`
+- **Reusable**: Can be imported as an npm package for use in other projects
 
 ## Supported Structures
 
@@ -100,12 +108,23 @@ Generated code and UI state persist across reloads via localStorage using Zustan
 ### Project Structure
 ```
 src/
-├── components/          # React components
-├── hooks/              # Custom React hooks
-├── stores/             # Zustand state stores
-├── types/              # TypeScript type definitions
-├── utils/              # Utility functions
-└── index.css          # Global styles
+├── components/                    # React components
+│   ├── pipeline-canvas/           # Pipeline canvas library (standalone)
+│   │   ├── components/            # Canvas UI components
+│   │   ├── nodes/                 # Node type JSON configurations
+│   │   │   ├── input_node/
+│   │   │   ├── rfdiffusion_node/
+│   │   │   ├── proteinmpnn_node/
+│   │   │   └── alphafold_node/
+│   │   ├── store/                 # Pipeline Zustand store
+│   │   ├── types/                 # Pipeline TypeScript types
+│   │   ├── utils/                 # Pipeline utilities
+│   │   └── index.ts               # Library exports
+│   └── ...                        # Other components
+├── stores/                        # Zustand state stores
+├── types/                         # TypeScript type definitions
+├── utils/                         # Utility functions
+└── index.css                      # Global styles
 ```
 
 ### Available Scripts

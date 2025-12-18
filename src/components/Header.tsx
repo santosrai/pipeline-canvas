@@ -1,13 +1,27 @@
 import React, { useEffect } from 'react';
-import { Atom, Settings, HelpCircle, Box } from 'lucide-react';
+import { Atom, Settings, HelpCircle, Box, Workflow } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAppStore } from '../stores/appStore';
 import { useChatHistoryStore } from '../stores/chatHistoryStore';
 
 export const Header: React.FC = () => {
   const { setSettingsDialogOpen } = useSettingsStore();
-  const { isViewerVisible, setViewerVisible } = useAppStore();
+  const { isViewerVisible, setViewerVisible, setActivePane } = useAppStore();
   const { activeSessionId, saveViewerVisibility } = useChatHistoryStore();
+  
+  const handleOpenPipeline = () => {
+    if (setActivePane) {
+      setActivePane('pipeline' as any);
+    }
+    if (!isViewerVisible) {
+      setViewerVisible(true);
+    }
+  };
+  
+  const handleOpenPipelineManager = () => {
+    // Open pipeline manager - will be handled by App component
+    window.dispatchEvent(new CustomEvent('open-pipeline-manager'));
+  };
   
   // Keyboard shortcuts
   useEffect(() => {
@@ -61,6 +75,26 @@ export const Header: React.FC = () => {
         >
           <Box className="w-4 h-4" />
           <span>3D Visual Editor</span>
+        </button>
+        
+        {/* Pipeline Canvas Button */}
+        <button
+          onClick={handleOpenPipeline}
+          className="flex items-center space-x-1 px-3 py-1 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+          title="Open Pipeline Canvas"
+        >
+          <Workflow className="w-4 h-4" />
+          <span>Pipeline Canvas</span>
+        </button>
+        
+        {/* Pipeline Manager Button */}
+        <button
+          onClick={handleOpenPipelineManager}
+          className="flex items-center space-x-1 px-3 py-1 text-sm text-blue-600 hover:text-blue-800 transition-colors border border-blue-300 rounded-md"
+          title="Open Pipeline Manager"
+        >
+          <Workflow className="w-4 h-4" />
+          <span>Pipelines</span>
         </button>
         
         <button className="flex items-center space-x-1 px-3 py-1 text-sm text-gray-600 hover:text-gray-900">

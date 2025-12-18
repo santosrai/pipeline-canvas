@@ -23,6 +23,9 @@ export interface Message {
   content: string;
   type: 'user' | 'ai';
   timestamp: Date;
+  // Job tracking for async operations
+  jobId?: string;
+  jobType?: 'rfdiffusion' | 'alphafold' | 'proteinmpnn';
   // Extended fields for AI messages
   thinkingProcess?: ThinkingProcess;
   alphafoldResult?: {

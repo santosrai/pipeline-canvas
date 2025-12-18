@@ -19,6 +19,7 @@ import { ThinkingProcessDisplay } from './ThinkingProcessDisplay';
 import { PDBFileUpload } from './PDBFileUpload';
 import ReactMarkdown from 'react-markdown';
 import { generatePDBSummary } from '../utils/pdbUtils';
+import { usePipelineStore, PipelineBlueprint } from '../components/pipeline-canvas';
 
 // Extended message metadata for structured agent results
 // Note: Message interface now includes thinkingProcess and uploadedFile, so ExtendedMessage is mainly for type compatibility
@@ -235,6 +236,7 @@ const createProteinMPNNError = (
 
 export const ChatPanel: React.FC = () => {
   const { plugin, currentCode, setCurrentCode, setIsExecuting, setActivePane, setPendingCodeToRun, setViewerVisible, setCurrentStructureOrigin, currentStructureOrigin } = useAppStore();
+  const { setGhostBlueprint } = usePipelineStore();
   const lastLoadedPdb = useAppStore(state => state.lastLoadedPdb);
   const selections = useAppStore(state => state.selections);
   const removeSelection = useAppStore(state => state.removeSelection);
@@ -1751,7 +1753,7 @@ try {
         selections: selections, // Full selections array for new multi-selection support
         agentId: agentSettings.selectedAgentId || undefined, // Only send if manually selected
         model: agentSettings.selectedModel || undefined, // Only send if manually selected
-        uploadedFileId: fileUploadResult?.file_id || uploadedFile?.file_id || undefined, // Include uploaded file ID if available
+        uploadedFileId: fileUploadResult?.file_id || undefined, // Only include file ID when file is uploaded with this message
       };
       console.log('[AI] route:request', payload);
       console.log('[DEBUG] currentCode length:', currentCode?.length || 0);
@@ -1863,6 +1865,37 @@ try {
                   setIsLoading(false);
                   return;
                 }
+              }
+
+              // Check if this is a pipeline blueprint response (streaming)
+              try {
+                const parsed = JSON.parse(finalResult.text || '');
+                if (parsed.type === 'blueprint' && parsed.blueprint) {
+                  console.log('🔧 [Pipeline] Blueprint detected in stream, setting ghost blueprint');
+                  const blueprint: PipelineBlueprint = {
+                    rationale: parsed.rationale || parsed.content || 'Pipeline blueprint generated',
+                    nodes: parsed.blueprint.nodes || [],
+                    edges: parsed.blueprint.edges || [],
+                    missing_resources: parsed.blueprint.missing_resources || [],
+                  };
+                  
+                  setGhostBlueprint(blueprint);
+                  setViewerVisible(true);
+                  setActivePane('pipeline');
+                  
+                  // Update message with blueprint info
+                  updateMessageWithFreshSession((msg: ExtendedMessage) => ({
+                    ...msg,
+                    content: blueprint.rationale + (blueprint.missing_resources.length > 0 
+                      ? `\n\n⚠️ Missing resources: ${blueprint.missing_resources.join(', ')}`
+                      : ''),
+                  }));
+                  
+                  setIsLoading(false);
+                  return;
+                }
+              } catch (e) {
+                // Not a JSON blueprint, continue
               }
               
               // For text agents, we're done
@@ -2099,6 +2132,49 @@ try {
               handleAlphaFoldResponse(JSON.stringify(fallbackData));
               return;
             }
+          }
+
+          // Check if this is a pipeline blueprint response
+          try {
+            const parsed = JSON.parse(aiText);
+            if (parsed.type === 'blueprint' && parsed.blueprint) {
+              console.log('🔧 [Pipeline] Blueprint detected, setting ghost blueprint');
+              const blueprint: PipelineBlueprint = {
+                rationale: parsed.rationale || parsed.content || 'Pipeline blueprint generated',
+                nodes: parsed.blueprint.nodes || [],
+                edges: parsed.blueprint.edges || [],
+                missing_resources: parsed.blueprint.missing_resources || [],
+              };
+              
+              setGhostBlueprint(blueprint);
+              setViewerVisible(true);
+              setActivePane('pipeline');
+              
+              // Create a message explaining the blueprint
+              const blueprintMsg: ExtendedMessage = {
+                id: uuidv4(),
+                content: blueprint.rationale + (blueprint.missing_resources.length > 0 
+                  ? `\n\n⚠️ Missing resources: ${blueprint.missing_resources.join(', ')}`
+                  : ''),
+                type: 'ai',
+                timestamp: new Date(),
+              };
+              
+              if (placeholderMessageId && activeSession) {
+                const updatedMessages = activeSession.messages.map(msg => 
+                  msg.id === placeholderMessageId
+                    ? blueprintMsg
+                    : msg
+                );
+                updateMessages(updatedMessages);
+              } else {
+                addMessage(blueprintMsg);
+              }
+              
+              return; // Exit early, blueprint is set
+            }
+          } catch (e) {
+            // Not a JSON blueprint, continue with normal text handling
           }
           
           // Bio-chat and other text agents should never modify the editor code

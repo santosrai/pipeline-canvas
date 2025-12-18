@@ -778,7 +778,8 @@ export class RFdiffusionErrorHandler {
         userMessage: error.userMessage,
         technicalMessage: error.technicalMessage || error.userMessage,
         suggestions: error.suggestions || [],
-        context: { ...context, originalError: error }
+        context: { ...context, originalError: error },
+        timestamp: new Date()
       } as ErrorDetails;
     }
 
@@ -828,7 +829,8 @@ export class RFdiffusionErrorHandler {
             priority: 2
           }
         ],
-        context: { ...context, originalError: error }
+        context: { ...context, originalError: error },
+        timestamp: new Date()
       } as ErrorDetails;
     }
 

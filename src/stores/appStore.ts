@@ -36,7 +36,7 @@ export interface FileMetadata {
 }
 
 interface AppState {
-  activePane: 'viewer' | 'editor' | 'files';
+  activePane: 'viewer' | 'editor' | 'files' | 'pipeline';
   plugin: PluginUIContext | null;
   currentCode: string;
   isExecuting: boolean;
@@ -48,7 +48,7 @@ interface AppState {
   currentStructureOrigin: StructureOrigin | null;
   selectedFile: { id: string; type: string; content: string; filename?: string } | null;
   
-  setActivePane: (pane: 'viewer' | 'editor' | 'files') => void;
+  setActivePane: (pane: 'viewer' | 'editor' | 'files' | 'pipeline') => void;
   setPlugin: (plugin: PluginUIContext | null) => void;
   setCurrentCode: (code: string) => void;
   setIsExecuting: (executing: boolean) => void;
@@ -61,7 +61,7 @@ interface AppState {
   setChatPanelWidth: (width: number) => void;
   setViewerVisible: (visible: boolean) => void;
   setCurrentStructureOrigin: (origin: StructureOrigin | null) => void;
-  setSelectedFile: (file: { id: string; type: string; content: string } | null) => void;
+  setSelectedFile: (file: { id: string; type: string; content: string; filename?: string } | null) => void;
   // Backward compatibility
   setSelection: (selection: SelectionContext | null) => void;
   selection: SelectionContext | null;

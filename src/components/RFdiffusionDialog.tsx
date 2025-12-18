@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ErrorDisplay, ErrorSummary } from './ErrorDisplay';
+import { ErrorDisplay } from './ErrorDisplay';
 import { RFdiffusionErrorHandler } from '../utils/errorHandler';
 import { PDBFileUpload } from './PDBFileUpload';
 import { useAppStore } from '../stores/appStore';
@@ -214,7 +214,7 @@ export const RFdiffusionDialog: React.FC<RFdiffusionDialogProps> = ({
   };
 
   // Handle complexity preset selection
-  const handleComplexityChange = (complexity: string, steps: number) => {
+  const handleComplexityChange = (_complexity: string, steps: number) => {
     setParameters(prev => ({ ...prev, diffusion_steps: steps }));
   };
 

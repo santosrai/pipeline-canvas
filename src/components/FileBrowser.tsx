@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Folder, File, ChevronRight, ChevronDown, Search, Loader2 } from 'lucide-react';
 import { useChatHistoryStore } from '../stores/chatHistoryStore';
 import { api } from '../utils/api';
-import { useAppStore } from '../stores/appStore';
 
 interface FileMetadata {
   file_id: string;
@@ -87,7 +86,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ onFileSelect }) => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const getFileIcon = (type: string) => {
+  const getFileIcon = () => {
     return <File className="w-4 h-4 text-blue-500" />;
   };
 
@@ -130,7 +129,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ onFileSelect }) => {
                   onClick={() => onFileSelect(file)}
                   className="w-full flex items-center space-x-2 px-2 py-1.5 hover:bg-blue-50 rounded text-left group"
                 >
-                  {getFileIcon(file.type)}
+                  {getFileIcon()}
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-gray-700 truncate">{file.filename}</div>
                     <div className="text-xs text-gray-500">

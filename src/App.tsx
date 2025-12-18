@@ -9,7 +9,9 @@ import { ResizablePanel } from './components/ResizablePanel';
 import { ErrorDashboard, useErrorDashboard } from './components/ErrorDashboard';
 import { FileBrowser } from './components/FileBrowser';
 import { FileEditor } from './components/FileEditor';
-import { Eye, Code2, Settings, FolderOpen } from 'lucide-react';
+import { PipelineCanvas, PipelineManager, PipelineExecution } from './components/pipeline-canvas';
+import { api } from './utils/api';
+import { Eye, Code2, Settings, FolderOpen, Workflow } from 'lucide-react';
 import { useAppStore } from './stores/appStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useChatHistoryStore } from './stores/chatHistoryStore';
@@ -19,7 +21,17 @@ function App() {
   const { activePane, setActivePane, chatPanelWidth, setChatPanelWidth, isViewerVisible, selectedFile, setSelectedFile } = useAppStore();
   const { settings, isSettingsDialogOpen, setSettingsDialogOpen } = useSettingsStore();
   const { isHistoryPanelOpen, setHistoryPanelOpen } = useChatHistoryStore();
+  const [isPipelineManagerOpen, setIsPipelineManagerOpen] = useState(false);
   const errorDashboard = useErrorDashboard();
+  
+  // Listen for pipeline manager open event
+  useEffect(() => {
+    const handleOpenPipelineManager = () => {
+      setIsPipelineManagerOpen(true);
+    };
+    window.addEventListener('open-pipeline-manager', handleOpenPipelineManager);
+    return () => window.removeEventListener('open-pipeline-manager', handleOpenPipelineManager);
+  }, []);
   
   // Auto-switch to viewer when editor gets disabled
   useEffect(() => {
@@ -43,7 +55,7 @@ function App() {
           type: file.type,
           content: data.content,
           filename: file.filename || data.filename || `file_${file.file_id}.pdb`,
-        });
+        } as { id: string; type: string; content: string; filename?: string });
         setActivePane('files');
       }
     } catch (error) {
@@ -132,12 +144,24 @@ function App() {
                 >
                   <FolderOpen className="w-4 h-4" />
                 </button>
+                <button
+                  onClick={() => {
+                    setSelectedFile(null);
+                    setActivePane('pipeline');
+                  }}
+                  className={`px-3 h-8 flex items-center gap-1 text-xs ${activePane === 'pipeline' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  title="Show pipeline canvas"
+                >
+                  <Workflow className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
             {/* Content Pane with fixed, responsive height */}
             <div className="flex-1 min-h-0">
-              {activePane === 'files' ? (
+              {activePane === 'pipeline' ? (
+                <PipelineCanvas />
+              ) : activePane === 'files' ? (
                 <div className="h-full">
                   {selectedFile ? (
                     <FileEditor
@@ -181,6 +205,15 @@ function App() {
         isOpen={errorDashboard.isOpen} 
         onClose={errorDashboard.closeDashboard} 
       />
+
+      {/* Pipeline Manager Modal */}
+      <PipelineManager
+        isOpen={isPipelineManagerOpen}
+        onClose={() => setIsPipelineManagerOpen(false)}
+      />
+
+      {/* Pipeline Execution Monitor */}
+      <PipelineExecution apiClient={api} />
     </div>
   );
 }

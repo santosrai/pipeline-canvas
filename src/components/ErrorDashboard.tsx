@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Activity, Users, Clock, Download, RefreshCw } from 'lucide-react';
 import { getErrorDashboardData } from '../utils/errorLogger';
-import { ErrorCategory, ErrorSeverity } from '../utils/errorHandler';
 
 interface ErrorDashboardProps {
   isOpen: boolean;
@@ -149,7 +148,7 @@ export const ErrorDashboard: React.FC<ErrorDashboardProps> = ({ isOpen, onClose 
                   {Object.entries(dashboardData.metrics.errorsByCategory).map(([category, count]) => (
                     <div key={category} className="flex justify-between items-center">
                       <span className="text-sm text-gray-600 capitalize">{category}</span>
-                      <span className="text-sm font-medium text-gray-900">{count}</span>
+                      <span className="text-sm font-medium text-gray-900">{count as React.ReactNode}</span>
                     </div>
                   ))}
                 </div>
@@ -169,7 +168,7 @@ export const ErrorDashboard: React.FC<ErrorDashboardProps> = ({ isOpen, onClose 
                       }`}>
                         {severity}
                       </span>
-                      <span className="text-sm font-medium text-gray-900">{count}</span>
+                      <span className="text-sm font-medium text-gray-900">{count as React.ReactNode}</span>
                     </div>
                   ))}
                 </div>
@@ -180,7 +179,7 @@ export const ErrorDashboard: React.FC<ErrorDashboardProps> = ({ isOpen, onClose 
             <div className="bg-white border rounded-lg p-4 mb-8">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Most Common Errors</h3>
               <div className="space-y-2">
-                {dashboardData.insights.mostCommonErrors.slice(0, 10).map((error: any, index: number) => (
+                {dashboardData.insights.mostCommonErrors.slice(0, 10).map((error: any) => (
                   <div key={error.code} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
                     <div className="flex items-center space-x-2">
                       <span className="text-xs font-mono bg-gray-100 px-2 py-1 rounded">{error.code}</span>

@@ -107,7 +107,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ models, onModelCha
         className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 shrink-0"
       >
         {selectedModel && isThinkingModel(selectedModel.id) && (
-          <Brain className="w-3 h-3 text-purple-600" title="Thinking Model" />
+          <span title="Thinking Model">
+            <Brain className="w-3 h-3 text-purple-600" />
+          </span>
         )}
         <span className="max-w-[140px] truncate">{displayText}</span>
         <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -165,7 +167,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ models, onModelCha
                     >
                       <div className="font-medium flex items-center gap-2">
                         {isThinkingModel(model.id) && (
-                          <Brain className="w-4 h-4 text-purple-600" title="Thinking Model" />
+                          <span title="Thinking Model">
+                            <Brain className="w-4 h-4 text-purple-600" />
+                          </span>
                         )}
                         {model.name}
                       </div>
@@ -203,7 +207,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ models, onModelCha
                       >
                         <div className="font-medium flex items-center gap-2">
                           {isThinkingModel(model.id) && (
-                            <Brain className="w-4 h-4 text-purple-600" title="Thinking Model" />
+                            <span title="Thinking Model">
+                              <Brain className="w-4 h-4 text-purple-600" />
+                            </span>
                           )}
                           {model.name}
                         </div>

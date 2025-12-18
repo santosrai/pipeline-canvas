@@ -23,16 +23,20 @@ interface PDBFileUploadProps {
   disabled?: boolean;
   pendingFile?: File | null; // File waiting to be uploaded
   sessionId?: string | null; // Optional session ID for file association
+  currentFile?: {
+    filename: string;
+    file_id: string;
+    file_path: string;
+  } | null; // Currently selected file from session
 }
 
 export const PDBFileUpload: React.FC<PDBFileUploadProps> = ({
   onFileSelected,
-  onFileUploaded,
   onFileCleared,
   onError,
   disabled = false,
   pendingFile = null,
-  sessionId = null,
+  currentFile: _currentFile = null,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 

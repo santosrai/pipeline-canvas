@@ -18,7 +18,6 @@ export interface ThinkingProcessDisplayProps {
 export const ThinkingProcessDisplay: React.FC<ThinkingProcessDisplayProps> = ({
   thinkingSteps = [],
   isProcessing = false,
-  currentStep,
 }) => {
   const [isExpanded, setIsExpanded] = useState(!isProcessing); // Auto-expand when processing
 

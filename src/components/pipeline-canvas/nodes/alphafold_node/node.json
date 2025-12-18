@@ -1,0 +1,62 @@
+{
+  "metadata": {
+    "type": "alphafold_node",
+    "label": "AlphaFold",
+    "icon": "Layers",
+    "color": "#f97316",
+    "borderColor": "border-orange-500",
+    "bgColor": "bg-orange-500",
+    "description": "Structure prediction"
+  },
+  "schema": {
+    "recycle_count": {
+      "type": "number",
+      "required": false,
+      "default": 3,
+      "min": 1,
+      "max": 20,
+      "label": "Recycle Count"
+    },
+    "num_relax": {
+      "type": "number",
+      "required": false,
+      "default": 0,
+      "min": 0,
+      "max": 10,
+      "label": "Number of Relax Steps"
+    }
+  },
+  "handles": {
+    "inputs": [
+      {
+        "id": "target",
+        "type": "target",
+        "position": "left",
+        "dataType": "sequence"
+      }
+    ],
+    "outputs": [
+      {
+        "id": "source",
+        "type": "source",
+        "position": "right",
+        "dataType": "pdb_file"
+      }
+    ]
+  },
+  "execution": {
+    "type": "api_call",
+    "endpoint": "/alphafold/run",
+    "method": "POST",
+    "payload": {
+      "sequence": "{{input.target}}",
+      "recycle_count": "{{config.recycle_count}}",
+      "num_relax": "{{config.num_relax}}"
+    }
+  },
+  "defaultConfig": {
+    "recycle_count": 3,
+    "num_relax": 0
+  }
+}
+

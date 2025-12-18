@@ -98,6 +98,30 @@ NovoProtein AI is a web-based molecular visualization and protein design platfor
 - **ProgressTracker**: Job status polling and display
 - **SettingsDialog**: Application settings and configuration
 
+#### 5. **Pipeline Canvas Library** (`src/components/pipeline-canvas/`)
+A standalone, reusable library for visual DAG workflow design:
+
+**Components:**
+- **PipelineCanvas**: Main React Flow canvas with custom nodes
+- **PipelineNodeConfig**: Node configuration panel
+- **PipelineNodePalette**: Drag-and-drop node palette
+- **PipelineExecution**: Workflow execution orchestrator
+- **PipelineManager**: Saved pipeline management
+- **CustomHandle**: n8n-style node connection handles
+
+**Node Types (JSON-configured in `nodes/*/node.json`):**
+- **input_node**: PDB file input
+- **rfdiffusion_node**: De novo backbone design
+- **proteinmpnn_node**: Sequence design
+- **alphafold_node**: Structure prediction
+
+**Store:**
+- **pipelineStore**: Zustand store for pipeline state, ghost blueprints, and execution
+
+**Utilities:**
+- **topologicalSort**: Graph traversal for execution order
+- **nodeLoader**: Dynamic JSON configuration loader
+
 #### 5. **UI Control Components**
 - **AgentSelector**: Dropdown for manually selecting which agent to use
 - **ModelSelector**: Dropdown for selecting AI model (Claude variants, etc.)
@@ -132,6 +156,16 @@ NovoProtein AI is a web-based molecular visualization and protein design platfor
   - UI preferences (theme, message limits)
   - API key configuration
   - Performance settings (debug mode)
+
+#### **pipelineStore** (`src/components/pipeline-canvas/store/pipelineStore.ts`)
+- **State**:
+  - `currentPipeline`: Active pipeline with nodes and edges
+  - `savedPipelines`: Array of saved pipeline configurations
+  - `ghostBlueprint`: Agent-generated blueprint awaiting approval
+  - `isExecuting`: Pipeline execution status
+  - `executionOrder`: Topologically sorted node execution order
+- **Actions**: Add/update/delete nodes and edges, approve/reject blueprints, save/load pipelines
+- **Persistence**: Saved pipelines persisted to localStorage
 
 ### Utilities
 

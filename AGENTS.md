@@ -2,6 +2,7 @@
 
 ## Project Structure & Module Organization
 - Frontend: `src/` (React + TypeScript, Vite). Entry: `src/main.tsx`, `src/App.tsx`; components in `src/components/`; state in `src/stores/`; utilities in `src/utils/`.
+- **Pipeline Canvas Library**: `src/components/pipeline-canvas/` (standalone, npm-ready). Contains visual workflow components, JSON node configs, Zustand store, and utilities.
 - Backend: `server/` (FastAPI). Entrypoint: `server/app.py`; agent logic in `server/agents.py`; routing graph in `server/router_graph.py`; RFdiffusion utilities `server/rfdiffusion_*.py`.
 - Tests: Python tests under `server/` (e.g., `test_rfdiffusion_*.py`) and `test_nvidia_api.py` at repo root.
 - Assets/Build: `index.html` at root; Vite output in `dist/`; RFdiffusion outputs in `server/rfdiffusion_results/`.
@@ -52,3 +53,17 @@ Client (Vite/React) → FastAPI `/api` → Agent graph → RFdiffusion/NVIDIA se
                                  └─> [rfdiffusion_* + external APIs]
 ```
 State lives in `src/stores/`; server writes results to `server/rfdiffusion_results/`, `server/proteinmpnn_results/`, and caches uploads under `server/uploads/`.
+
+## Pipeline Canvas Library
+The visual pipeline workflow feature is extracted as a standalone library in `src/components/pipeline-canvas/`:
+
+- **Components**: `PipelineCanvas`, `PipelineNodeConfig`, `PipelineNodePalette`, `PipelineExecution`, `PipelineManager`, `CustomHandle`
+- **Node JSON Configs**: `nodes/{input_node,rfdiffusion_node,proteinmpnn_node,alphafold_node}/node.json`
+- **Store**: `store/pipelineStore.ts` (Zustand with persistence)
+- **Utils**: `utils/topologicalSort.ts`, `utils/nodeLoader.ts`
+- **Types**: `types/index.ts`
+
+Import from the library:
+```typescript
+import { PipelineCanvas, usePipelineStore } from './components/pipeline-canvas';
+```

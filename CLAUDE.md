@@ -136,6 +136,57 @@ A molecular visualization application integrating MolStar viewer with AI-powered
 - `create 100-150 residue protein` → Length-specific design
 - `scaffold around hotspots A50,A51,A52` → Hotspot preservation design
 
+### Pipeline Canvas Library (Visual Workflow):
+**Branch**: `main`
+
+**Library Location**: `src/components/pipeline-canvas/`
+
+A standalone, reusable library for visual DAG workflow design, extracted for independent development.
+
+**Library Structure**:
+```
+src/components/pipeline-canvas/
+├── package.json              # npm package configuration
+├── tsconfig.json             # TypeScript config
+├── index.ts                  # Main exports
+├── components/               # UI components
+│   ├── PipelineCanvas.tsx    # Main React Flow canvas
+│   ├── PipelineNodeConfig.tsx
+│   ├── PipelineNodePalette.tsx
+│   ├── PipelineExecution.tsx
+│   ├── PipelineManager.tsx
+│   └── CustomHandle.tsx      # n8n-style handles
+├── nodes/                    # JSON node configurations
+│   ├── input_node/node.json
+│   ├── rfdiffusion_node/node.json
+│   ├── proteinmpnn_node/node.json
+│   └── alphafold_node/node.json
+├── types/index.ts            # TypeScript types
+├── store/pipelineStore.ts    # Zustand store
+└── utils/
+    ├── topologicalSort.ts    # Graph execution order
+    └── nodeLoader.ts         # JSON config loader
+```
+
+**Key Features**:
+- **React Flow Integration**: Visual node-based workflow design
+- **n8n-style Handles**: Input/output connection points with plus icons
+- **JSON Configuration**: Node types defined in JSON files for easy extension
+- **Ghost Blueprints**: Agent-generated pipelines shown as drafts before approval
+- **Topological Execution**: Automatic dependency-based execution order
+- **Pipeline Persistence**: Save/load workflows to localStorage
+
+**Node Types**:
+- `input_node`: PDB file input
+- `rfdiffusion_node`: De novo backbone design
+- `proteinmpnn_node`: Sequence design
+- `alphafold_node`: Structure prediction
+
+**Usage**:
+```typescript
+import { PipelineCanvas, usePipelineStore } from './components/pipeline-canvas';
+```
+
 ### Enhanced Error Handling System:
 **New Components Added**:
 - `ErrorDisplay.tsx`: Rich error presentation with expandable details
