@@ -159,7 +159,11 @@ export const usePerformanceSettings = () => {
 };
 
 export const useAgentSettings = () => {
-  const settings = useSettingsStore((state) => state.settings.agent);
+  // Ensure agent settings always returns a valid object even during hydration
+  const settings = useSettingsStore((state) => state.settings?.agent ?? {
+    selectedAgentId: null,
+    selectedModel: null,
+  });
   const updateSettings = useSettingsStore((state) => state.updateAgentSettings);
   return { settings, updateSettings };
 };

@@ -11,6 +11,7 @@ import { useChatHistoryStore } from '../stores/chatHistoryStore';
 import { StructureElement, StructureProperties } from 'molstar/lib/mol-model/structure';
 // OrderedSet no longer needed after switching to getFirstLocation
 import { CodeExecutor } from '../utils/codeExecutor';
+import { MolstarToolbar } from './MolstarToolbar';
 
 export const MolstarViewer: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -305,42 +306,47 @@ export const MolstarViewer: React.FC = () => {
   }, [plugin, isInitialized, currentCode, activeSessionId]);
 
   return (
-    <div className="h-full w-full relative bg-gray-900 molstar-container">
-      <style>{`
-        .molstar-container .msp-plugin {
-          position: absolute !important;
-          inset: 0 !important;
-          width: 100% !important;
-          height: 100% !important;
-        }
-        .molstar-container .msp-layout-expanded {
-          position: absolute !important;
-          inset: 0 !important;
-        }
-      `}</style>
-      {isLoading && (
-        <div className="absolute inset-0 bg-gray-900 flex items-center justify-center z-10">
-          <div className="text-white text-center">
-            <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <div>Initializing Molstar Viewer...</div>
+    <div className="h-full w-full flex flex-col bg-gray-900">
+      {/* Chimera-style Select/Actions Toolbar */}
+      <MolstarToolbar plugin={plugin} />
+      
+      {/* Molstar Viewer Container */}
+      <div className="flex-1 relative molstar-container">
+        <style>{`
+          .molstar-container .msp-plugin {
+            position: absolute !important;
+            inset: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+          }
+          .molstar-container .msp-layout-expanded {
+            position: absolute !important;
+            inset: 0 !important;
+          }
+        `}</style>
+        {isLoading && (
+          <div className="absolute inset-0 bg-gray-900 flex items-center justify-center z-10">
+            <div className="text-white text-center">
+              <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <div>Initializing Molstar Viewer...</div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div 
-        ref={containerRef} 
-        className="absolute inset-0 h-full w-full"
-      />
+        <div 
+          ref={containerRef} 
+          className="absolute inset-0 h-full w-full"
+        />
 
-
-      {!isLoading && !isInitialized && (
-        <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
-          <div className="text-white text-center">
-            <div className="text-red-400 mb-2">Failed to initialize Molstar viewer</div>
-            <div className="text-sm text-gray-400">Please refresh the page to try again</div>
+        {!isLoading && !isInitialized && (
+          <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
+            <div className="text-white text-center">
+              <div className="text-red-400 mb-2">Failed to initialize Molstar viewer</div>
+              <div className="text-sm text-gray-400">Please refresh the page to try again</div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

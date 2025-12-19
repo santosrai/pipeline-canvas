@@ -35,6 +35,16 @@ export interface FileMetadata {
   downloadUrl: string;
 }
 
+// Molstar visual selection state (for Chimera-style menus)
+export interface MolstarSelectionState {
+  count: number;
+  lastAction?: {
+    type: 'select' | 'color' | 'representation' | 'visibility' | 'label';
+    target?: string;
+    timestamp: number;
+  };
+}
+
 interface AppState {
   activePane: 'viewer' | 'editor' | 'files' | 'pipeline';
   plugin: PluginUIContext | null;
@@ -47,6 +57,8 @@ interface AppState {
   isViewerVisible: boolean;
   currentStructureOrigin: StructureOrigin | null;
   selectedFile: { id: string; type: string; content: string; filename?: string } | null;
+  // Molstar visual selection tracking
+  molstarSelection: MolstarSelectionState;
   
   setActivePane: (pane: 'viewer' | 'editor' | 'files' | 'pipeline') => void;
   setPlugin: (plugin: PluginUIContext | null) => void;
@@ -62,6 +74,10 @@ interface AppState {
   setViewerVisible: (visible: boolean) => void;
   setCurrentStructureOrigin: (origin: StructureOrigin | null) => void;
   setSelectedFile: (file: { id: string; type: string; content: string; filename?: string } | null) => void;
+  // Molstar selection methods
+  setMolstarSelectionCount: (count: number) => void;
+  recordMolstarAction: (action: MolstarSelectionState['lastAction']) => void;
+  hasMolstarSelection: () => boolean;
   // Backward compatibility
   setSelection: (selection: SelectionContext | null) => void;
   selection: SelectionContext | null;
@@ -81,6 +97,7 @@ export const useAppStore = create<AppState>()(
       isViewerVisible: false, // Hidden by default for new chats
       currentStructureOrigin: null,
       selectedFile: null,
+      molstarSelection: { count: 0 },
       
       setActivePane: (pane) => set({ activePane: pane }),
       setPlugin: (plugin) => set({ plugin }),
@@ -92,6 +109,15 @@ export const useAppStore = create<AppState>()(
       setViewerVisible: (visible) => set({ isViewerVisible: visible }),
       setCurrentStructureOrigin: (origin) => set({ currentStructureOrigin: origin }),
       setSelectedFile: (file) => set({ selectedFile: file }),
+      
+      // Molstar selection methods
+      setMolstarSelectionCount: (count) => set((state) => ({
+        molstarSelection: { ...state.molstarSelection, count }
+      })),
+      recordMolstarAction: (action) => set((state) => ({
+        molstarSelection: { ...state.molstarSelection, lastAction: action }
+      })),
+      hasMolstarSelection: () => get().molstarSelection.count > 0,
       
       addSelection: (selection) => set((state) => {
         // Check for duplicates based on key identifying properties

@@ -459,7 +459,8 @@ export const ChatPanel: React.FC = () => {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   
   // Uploaded file state (after upload completes)
-  const [uploadedFile, setUploadedFile] = useState<{
+  // Note: Currently tracked via uploadedFileInfo local variable, state value kept for future use
+  const [, setUploadedFile] = useState<{
     filename: string;
     file_id: string;
     file_url: string;
