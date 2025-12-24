@@ -3,29 +3,42 @@
   "version": "1.0.0",
   "description": "Pipeline canvas component library for visual workflow design",
   "type": "module",
-  "main": "./index.ts",
-  "types": "./index.ts",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./index.ts",
-      "types": "./index.ts"
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.ts"
     },
     "./components": {
-      "import": "./components/index.ts",
-      "types": "./components/index.ts"
+      "import": "./dist/components/index.mjs",
+      "types": "./dist/components/index.d.ts"
     },
     "./types": {
-      "import": "./types/index.ts",
-      "types": "./types/index.ts"
+      "import": "./dist/types/index.mjs",
+      "types": "./dist/types/index.d.ts"
     },
     "./store": {
-      "import": "./store/pipelineStore.ts",
-      "types": "./store/pipelineStore.ts"
+      "import": "./dist/store/pipelineStore.mjs",
+      "types": "./dist/store/pipelineStore.d.ts"
     },
     "./utils": {
-      "import": "./utils/index.ts",
-      "types": "./utils/index.ts"
-    }
+      "import": "./dist/utils/index.mjs",
+      "types": "./dist/utils/index.d.ts"
+    },
+    "./style.css": "./dist/style.css"
+  },
+  "files": [
+    "dist",
+    "nodes",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "vite build && tsc --emitDeclarationOnly --outDir dist",
+    "type-check": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
     "react": "^18.3.1",
@@ -34,15 +47,24 @@
     "zustand": "^4.5.4",
     "lucide-react": "^0.427.0"
   },
-  "scripts": {
-    "type-check": "tsc --noEmit"
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.3.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YOUR_USERNAME/pipeline-canvas.git"
   },
   "keywords": [
     "pipeline",
     "canvas",
     "workflow",
     "react",
-    "reactflow"
+    "reactflow",
+    "widget"
   ],
   "author": "",
   "license": "MIT"

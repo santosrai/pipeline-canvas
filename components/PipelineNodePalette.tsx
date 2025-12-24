@@ -1,7 +1,8 @@
 import React from 'react';
 import { usePipelineStore } from '../store/pipelineStore';
 import { NodeType, PipelineNode } from '../types/index';
-import { FileInput, Sparkles, Dna, Layers } from 'lucide-react';
+import { getDefaultNodeConfig } from '../utils/nodeLoader';
+import { FileInput, Sparkles, Dna, Layers, MessageSquare, Globe } from 'lucide-react';
 
 interface NodeTypeInfo {
   type: NodeType;
@@ -40,17 +41,34 @@ const nodeTypes: NodeTypeInfo[] = [
     color: 'bg-orange-500',
     description: 'Structure prediction',
   },
+  {
+    type: 'message_input_node',
+    label: 'Code Execution',
+    icon: <MessageSquare className="w-5 h-5" />,
+    color: 'bg-green-500',
+    description: 'Execute JavaScript code for testing and processing',
+  },
+  {
+    type: 'http_request_node',
+    label: 'HTTP Request',
+    icon: <Globe className="w-5 h-5" />,
+    color: 'bg-blue-500',
+    description: 'Make HTTP requests to any API endpoint',
+  },
 ];
 
 export const PipelineNodePalette: React.FC = () => {
   const { addNode } = usePipelineStore();
 
-  const handleAddNode = (nodeType: NodeType) => {
+  const handleAddNode = async (nodeType: NodeType) => {
+    // Load default config for the node type
+    const defaultConfig = await getDefaultNodeConfig(nodeType);
+    
     const node: PipelineNode = {
       id: `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       type: nodeType,
       label: nodeTypes.find((nt) => nt.type === nodeType)?.label || nodeType,
-      config: {},
+      config: { ...defaultConfig },
       inputs: {},
       status: 'idle',
       position: {
@@ -63,9 +81,9 @@ export const PipelineNodePalette: React.FC = () => {
   };
 
   return (
-    <div className="w-64 bg-[#1e1e32] border-r border-gray-700/50 p-4">
-      <h3 className="text-sm font-semibold text-gray-200 mb-3">Node Palette</h3>
-      <div className="space-y-2">
+    <div className="w-64 bg-[#1e1e32] border-r border-gray-700/50 p-4 flex flex-col h-full">
+      <h3 className="text-sm font-semibold text-gray-200 mb-3 flex-shrink-0">Node Palette</h3>
+      <div className="space-y-2 overflow-y-auto flex-1 min-h-0">
         {nodeTypes.map((nodeType) => (
           <button
             key={nodeType.type}

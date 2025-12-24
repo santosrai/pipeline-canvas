@@ -33,7 +33,9 @@ import {
   FileInput,
   Sparkles,
   Dna,
-  Atom
+  Atom,
+  MessageSquare,
+  Globe
 } from 'lucide-react';
 
 // Get status class for node border glow
@@ -302,11 +304,150 @@ const AlphaFoldNode: React.FC<{ data: any }> = ({ data }) => {
   );
 };
 
+const MessageInputNode: React.FC<{ data: any }> = ({ data }) => {
+  const status = data.status as NodeStatus;
+  const isExecuting = data.isExecuting;
+  
+  const getStatusIcon = () => {
+    switch (status) {
+      case 'running':
+        return (
+          <div className="relative">
+            <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+            <div className="absolute inset-0 bg-blue-400/30 rounded-full animate-ping" />
+          </div>
+        );
+      case 'success':
+        return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+      case 'error':
+        return <XCircle className="w-4 h-4 text-red-500" />;
+      default:
+        return null;
+    }
+  };
+
+  const codePreview = data.config?.code 
+    ? (data.config.code.length > 40 
+        ? data.config.code.substring(0, 40).replace(/\n/g, ' ') + '...' 
+        : data.config.code.replace(/\n/g, ' '))
+    : 'No code';
+
+  return (
+    <div className={`
+      px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
+      ${getStatusClasses(status, isExecuting)}
+    `}>
+      <CustomHandle type="source" position={Position.Right} />
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+            status === 'running' ? 'bg-blue-100' : 
+            status === 'success' ? 'bg-green-100' : 
+            status === 'error' ? 'bg-red-100' : 'bg-green-100'
+          }`}>
+            <MessageSquare className={`w-4 h-4 ${
+              status === 'running' ? 'text-blue-600' : 
+              status === 'success' ? 'text-green-600' : 
+              status === 'error' ? 'text-red-600' : 'text-green-600'
+            }`} />
+          </div>
+          <span className="font-semibold text-sm text-gray-900">Code Execution</span>
+        </div>
+        {getStatusIcon()}
+      </div>
+      <div className="text-xs text-gray-500 pl-10 font-mono">
+        {codePreview}
+      </div>
+      {status === 'success' && (
+        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+          <CheckCircle2 className="w-3 h-3 text-white" />
+        </div>
+      )}
+    </div>
+  );
+};
+
+const HttpRequestNode: React.FC<{ data: any }> = ({ data }) => {
+  const status = data.status as NodeStatus;
+  const isExecuting = data.isExecuting;
+  
+  const getStatusIcon = () => {
+    switch (status) {
+      case 'running':
+        return (
+          <div className="relative">
+            <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+            <div className="absolute inset-0 bg-blue-400/30 rounded-full animate-ping" />
+          </div>
+        );
+      case 'success':
+        return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+      case 'error':
+        return <XCircle className="w-4 h-4 text-red-500" />;
+      default:
+        return null;
+    }
+  };
+
+  const urlPreview = data.config?.url 
+    ? (data.config.url.length > 30 
+        ? data.config.url.substring(0, 30) + '...' 
+        : data.config.url)
+    : 'No URL';
+
+  return (
+    <div className={`
+      px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
+      ${getStatusClasses(status, isExecuting)}
+    `}>
+      <CustomHandle type="target" position={Position.Left} />
+      <CustomHandle type="source" position={Position.Right} />
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+            status === 'running' ? 'bg-blue-100' : 
+            status === 'success' ? 'bg-green-100' : 
+            status === 'error' ? 'bg-red-100' : 'bg-blue-100'
+          }`}>
+            <Globe className={`w-4 h-4 ${
+              status === 'running' ? 'text-blue-600' : 
+              status === 'success' ? 'text-green-600' : 
+              status === 'error' ? 'text-red-600' : 'text-blue-600'
+            }`} />
+          </div>
+          <span className="font-semibold text-sm text-gray-900">HTTP Request</span>
+        </div>
+        {getStatusIcon()}
+      </div>
+      <div className="text-xs text-gray-500 space-y-1 pl-10">
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{data.config?.method || 'GET'}</span>
+          <span className="text-gray-400">•</span>
+          <span className="truncate">{urlPreview}</span>
+        </div>
+        {data.error && (
+          <div className="text-red-600 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" />
+            {data.error}
+          </div>
+        )}
+      </div>
+      {status === 'success' && (
+        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+          <CheckCircle2 className="w-3 h-3 text-white" />
+        </div>
+      )}
+    </div>
+  );
+};
+
 const nodeTypes = {
   input_node: InputNode,
   rfdiffusion_node: RFdiffusionNode,
   proteinmpnn_node: ProteinMPNNNode,
   alphafold_node: AlphaFoldNode,
+  message_input_node: MessageInputNode,
+  http_request_node: HttpRequestNode,
 };
 
 export const PipelineCanvas: React.FC = () => {
@@ -409,20 +550,37 @@ export const PipelineCanvas: React.FC = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(reactFlowNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(reactFlowEdges);
 
-  // Update nodes/edges when pipeline changes
+  // Update nodes/edges when pipeline changes - use ref to prevent infinite loops
+  const prevNodesRef = React.useRef<string>('');
+  const prevEdgesRef = React.useRef<string>('');
+
   React.useEffect(() => {
-    setNodes(reactFlowNodes);
+    const nodesKey = JSON.stringify(reactFlowNodes.map(n => ({ id: n.id, data: n.data, position: n.position })));
+    if (nodesKey !== prevNodesRef.current) {
+      prevNodesRef.current = nodesKey;
+      setNodes(reactFlowNodes);
+    }
   }, [reactFlowNodes, setNodes]);
 
   React.useEffect(() => {
-    setEdges(reactFlowEdges);
+    const edgesKey = JSON.stringify(reactFlowEdges.map(e => ({ id: e.id, source: e.source, target: e.target })));
+    if (edgesKey !== prevEdgesRef.current) {
+      prevEdgesRef.current = edgesKey;
+      setEdges(reactFlowEdges);
+    }
   }, [reactFlowEdges, setEdges]);
 
   const onConnect = useCallback(
-    (params: Connection) => {
-      if (params.source && params.target) {
+    (params: Connection | null) => {
+      if (!params || !params.source || !params.target) {
+        console.warn('[PipelineCanvas] Invalid connection params:', params);
+        return;
+      }
+      try {
         addPipelineEdge(params.source, params.target);
-        setEdges((eds) => addEdge(params, eds));
+        setEdges((eds) => addEdge(params as Connection, eds));
+      } catch (error) {
+        console.error('[PipelineCanvas] Error adding edge:', error);
       }
     },
     [addPipelineEdge, setEdges]
@@ -696,23 +854,13 @@ export const PipelineCanvas: React.FC = () => {
 
       {/* Node Configuration Panel (only in editor view) */}
       {selectedNodeId && viewMode === 'editor' && (
-        <div className="absolute right-4 top-20 bottom-4 w-80 bg-[#1e1e32] border border-gray-700/50 rounded-xl shadow-2xl z-10 overflow-hidden flex flex-col">
-          <div className="px-4 py-3 border-b border-gray-700/50 flex items-center justify-between bg-gray-800/30">
-            <h3 className="text-sm font-semibold text-gray-200">Node Configuration</h3>
-            <button
-              onClick={() => setSelectedNodeId(null)}
-              className="text-gray-500 hover:text-gray-300 transition-colors"
-            >
-              ×
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4">
-            <PipelineNodeConfig
-              nodeId={selectedNodeId}
-              onUpdate={(updates) => updateNode(selectedNodeId, updates)}
-              onDelete={() => handleNodeDelete(selectedNodeId)}
-            />
-          </div>
+        <div className="absolute right-4 top-20 bottom-4 w-[900px] bg-[#1e1e32] border border-gray-700/50 rounded-xl shadow-2xl z-10 overflow-hidden flex flex-col">
+          <PipelineNodeConfig
+            nodeId={selectedNodeId}
+            onUpdate={(updates) => updateNode(selectedNodeId, updates)}
+            onDelete={() => handleNodeDelete(selectedNodeId)}
+            onClose={() => setSelectedNodeId(null)}
+          />
         </div>
       )}
     </div>

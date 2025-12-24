@@ -1,0 +1,8 @@
+@import 'reactflow/dist/style.css';
+
+/* Custom pipeline canvas styles */
+.pipeline-canvas-container {
+  width: 100%;
+  height: 100%;
+}
+

@@ -11,7 +11,7 @@ export interface NodeMetadata {
 }
 
 export interface FieldSchema {
-  type: 'string' | 'number' | 'boolean';
+  type: 'string' | 'number' | 'boolean' | 'select' | 'json' | 'textarea';
   required?: boolean;
   default?: any;
   placeholder?: string;
@@ -20,6 +20,7 @@ export interface FieldSchema {
   min?: number;
   max?: number;
   step?: number;
+  options?: Array<{ value: string; label: string }>; // For select type
   validation?: {
     pattern?: string;
     message?: string;
@@ -39,9 +40,14 @@ export interface HandleDefinition {
 
 export interface ExecutionConfig {
   type: string;
-  endpoint: string | null;
-  method: string;
+  endpoint?: string | null;
+  method?: string;
+  queryParams?: string | Record<string, any>;
+  headers?: Record<string, any>;
   payload?: Record<string, any>;
+  message?: string; // For log execution type
+  code?: string; // For code execution type
+  [key: string]: any; // Allow additional properties
 }
 
 export interface NodeDefinition {
@@ -117,7 +123,7 @@ function validateNodeConfig(config: any, expectedType: NodeType): void {
  * Loads all node configurations
  */
 export async function loadAllNodeConfigs(): Promise<Map<NodeType, NodeDefinition>> {
-  const nodeTypes: NodeType[] = ['input_node', 'rfdiffusion_node', 'proteinmpnn_node', 'alphafold_node'];
+  const nodeTypes: NodeType[] = ['input_node', 'rfdiffusion_node', 'proteinmpnn_node', 'alphafold_node', 'message_input_node'];
   
   const configs = await Promise.all(
     nodeTypes.map(async (type) => {

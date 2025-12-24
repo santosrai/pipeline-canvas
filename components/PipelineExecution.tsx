@@ -1,9 +1,11 @@
 import React, { useEffect } from 'react';
-import { usePipelineStore } from '../store/pipelineStore';
+import { usePipelineStore, ExecutionSession } from '../store/pipelineStore';
 import { Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { executeNode } from '../utils/executionEngine';
 
 interface ApiClient {
-  post: (endpoint: string, data: any) => Promise<any>;
+  post: (endpoint: string, data: any, config?: { headers?: Record<string, string>; method?: string }) => Promise<any>;
+  get: (endpoint: string, config?: { headers?: Record<string, string> }) => Promise<any>;
 }
 
 interface PipelineExecutionProps {
@@ -36,73 +38,241 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
         // Skip if already successful
         if (node.status === 'success') continue;
 
+        // Capture input data for logging (outside try block for error handling)
+        const inputDataForLog: Record<string, any> = {};
+        if (node.config) {
+          inputDataForLog.config = node.config;
+        }
+
         try {
           updateNodeStatus(nodeId, 'running');
+          const startTime = Date.now();
 
-          // Execute based on node type
-          switch (node.type) {
-            case 'input_node':
-              // Check if file exists
-              const filename = node.config?.filename;
-              if (!filename) {
-                throw new Error('No filename specified');
+          // Execute node using dynamic execution engine with logging
+          let executionResult: any;
+          try {
+            executionResult = await executeNode(node, {
+              pipeline: currentPipeline,
+              apiClient,
+            });
+          } catch (execError: any) {
+            console.error(`[PipelineExecution] Error executing node ${nodeId}:`, execError);
+            throw execError;
+          }
+          
+          const endTime = Date.now();
+          const duration = endTime - startTime;
+
+          // Extract request/response details from execution result
+          let result: any;
+          try {
+            // #region agent log
+            const logEntry12 = {location:'PipelineExecution.tsx:69',message:'extracting result from executionResult',data:{hasExecutionResult:!!executionResult,hasData:!!executionResult?.data,executionResultType:typeof executionResult},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'};
+            console.log('[DEBUG]', logEntry12);
+            fetch('http://127.0.0.1:7243/ingest/e128561e-dec0-450c-a8ea-2bf15be2e2f5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry12)}).catch((e)=>console.warn('[DEBUG] Log fetch failed:',e));
+            // #endregion
+            
+            result = executionResult?.data || executionResult;
+            
+            // #region agent log
+            const logEntry13 = {location:'PipelineExecution.tsx:72',message:'result extracted',data:{resultType:typeof result,resultIsObject:typeof result==='object',resultKeys:result&&typeof result==='object'?Object.keys(result):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'};
+            console.log('[DEBUG]', logEntry13);
+            fetch('http://127.0.0.1:7243/ingest/e128561e-dec0-450c-a8ea-2bf15be2e2f5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry13)}).catch((e)=>console.warn('[DEBUG] Log fetch failed:',e));
+            // #endregion
+            
+            // Safety check: ensure result is an object or can be safely handled
+            if (result && typeof result !== 'object') {
+              console.warn(`[PipelineExecution] Unexpected result type for node ${nodeId}:`, typeof result, result);
+              // Convert to object if it's a primitive
+              result = { value: result };
+              
+              // #region agent log
+              const logEntry14 = {location:'PipelineExecution.tsx:77',message:'converted primitive to object',data:{result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'};
+              console.log('[DEBUG]', logEntry14);
+              fetch('http://127.0.0.1:7243/ingest/e128561e-dec0-450c-a8ea-2bf15be2e2f5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry14)}).catch((e)=>console.warn('[DEBUG] Log fetch failed:',e));
+              // #endregion
+            }
+          } catch (resultError: any) {
+            // #region agent log
+            const logEntry15 = {location:'PipelineExecution.tsx:80',message:'error extracting result',data:{error:resultError.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'};
+            console.error('[DEBUG]', logEntry15);
+            fetch('http://127.0.0.1:7243/ingest/e128561e-dec0-450c-a8ea-2bf15be2e2f5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry15)}).catch((e)=>console.warn('[DEBUG] Log fetch failed:',e));
+            // #endregion
+            console.error(`[PipelineExecution] Error extracting result for node ${nodeId}:`, resultError);
+            result = { error: 'Failed to extract result' };
+          }
+
+          // Store result metadata if available
+          if (result) {
+            try {
+              // #region agent log
+              const logEntry16 = {location:'PipelineExecution.tsx:87',message:'storing result metadata',data:{resultKeys:Object.keys(result),hasOutputFile:!!result.output_file,hasSequence:!!result.sequence,hasMessage:!!result.message,hasData:!!result.data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'};
+              console.log('[DEBUG]', logEntry16);
+              fetch('http://127.0.0.1:7243/ingest/e128561e-dec0-450c-a8ea-2bf15be2e2f5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry16)}).catch((e)=>console.warn('[DEBUG] Log fetch failed:',e));
+              // #endregion
+              
+              const resultMetadata: Record<string, any> = {};
+              
+              // Extract common result fields
+              if (result.output_file || result.file) {
+                resultMetadata.output_file = result.output_file || result.file;
               }
-              // In a real implementation, verify file exists
-              // File exists check passed
-              break;
-
-            case 'rfdiffusion_node':
-              // Get input PDB from previous node
-              const rfdiffInput = getInputPDB(nodeId, currentPipeline.nodes, currentPipeline.edges);
-              if (!rfdiffInput) {
-                throw new Error('No input PDB file found');
+              if (result.sequence) {
+                resultMetadata.sequence = result.sequence;
+              }
+              if (result.message) {
+                resultMetadata.message = result.message;
+              }
+              if (result.data) {
+                resultMetadata.data = result.data;
+              }
+              
+              // Store full result if no specific fields found
+              if (Object.keys(resultMetadata).length === 0 && typeof result === 'object') {
+                Object.assign(resultMetadata, result);
               }
 
-              await apiClient.post('/rfdiffusion/run', {
-                pdb_file: rfdiffInput,
-                contigs: node.config?.contigs || '50',
-                num_designs: node.config?.num_designs || 1,
+              // #region agent log
+              const logEntry17 = {location:'PipelineExecution.tsx:109',message:'result metadata prepared',data:{metadataKeys:Object.keys(resultMetadata),metadataPreview:JSON.stringify(resultMetadata).substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'};
+              console.log('[DEBUG]', logEntry17);
+              fetch('http://127.0.0.1:7243/ingest/e128561e-dec0-450c-a8ea-2bf15be2e2f5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry17)}).catch((e)=>console.warn('[DEBUG] Log fetch failed:',e));
+              // #endregion
+
+              // Update node with result metadata
+              usePipelineStore.getState().updateNode(nodeId, {
+                result_metadata: resultMetadata,
               });
-              break;
+              
+              // #region agent log
+              const logEntry18 = {location:'PipelineExecution.tsx:115',message:'result metadata stored in node',data:{nodeId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'};
+              console.log('[DEBUG]', logEntry18);
+              fetch('http://127.0.0.1:7243/ingest/e128561e-dec0-450c-a8ea-2bf15be2e2f5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry18)}).catch((e)=>console.warn('[DEBUG] Log fetch failed:',e));
+              // #endregion
+            } catch (metadataError: any) {
+            // #region agent log
+            const logEntry19 = {location:'PipelineExecution.tsx:118',message:'error storing metadata',data:{error:metadataError.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'};
+            console.error('[DEBUG]', logEntry19);
+            fetch('http://127.0.0.1:7243/ingest/e128561e-dec0-450c-a8ea-2bf15be2e2f5',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry19)}).catch((e)=>console.warn('[DEBUG] Log fetch failed:',e));
+            // #endregion
+              console.error(`[PipelineExecution] Error storing metadata for node ${nodeId}:`, metadataError);
+            }
+          }
 
-            case 'proteinmpnn_node':
-              const mpnnInput = getInputPDB(nodeId, currentPipeline.nodes, currentPipeline.edges);
-              if (!mpnnInput) {
-                throw new Error('No input PDB file found');
-              }
-
-              await apiClient.post('/proteinmpnn/run', {
-                pdb_file: mpnnInput,
-                num_sequences: node.config?.num_sequences || 8,
-                temperature: node.config?.temperature || 0.1,
-              });
-              break;
-
-            case 'alphafold_node':
-              const afInput = getInputSequence(nodeId, currentPipeline.nodes, currentPipeline.edges);
-              if (!afInput) {
-                throw new Error('No input sequence found');
-              }
-
-              await apiClient.post('/alphafold/run', {
-                sequence: afInput,
-                recycle_count: node.config?.recycle_count || 3,
-                num_relax: node.config?.num_relax || 0,
-              });
-              break;
-
-            default:
-              throw new Error(`Unknown node type: ${node.type}`);
+          // Update execution log with detailed request/response
+          const existingLog = usePipelineStore.getState().currentExecution?.logs.find(
+            l => l.nodeId === nodeId
+          );
+          
+          // Debug logging for HTTP request nodes
+          if (node.type === 'http_request_node') {
+            console.log('[PipelineExecution] HTTP Request result:', {
+              nodeId,
+              hasExecutionResult: !!executionResult,
+              executionResultKeys: executionResult ? Object.keys(executionResult) : [],
+              hasData: !!executionResult?.data,
+              hasRequest: !!executionResult?.request,
+              hasResponse: !!executionResult?.response,
+              resultType: typeof result,
+              resultKeys: result && typeof result === 'object' ? Object.keys(result) : null,
+              responseData: executionResult?.response?.data,
+            });
+          }
+          
+          if (existingLog) {
+            usePipelineStore.getState().updateExecutionLog(nodeId, {
+              status: 'success',
+              completedAt: new Date(),
+              duration,
+              output: result,
+              input: inputDataForLog,
+              request: executionResult?.request,
+              response: executionResult?.response,
+            });
+          } else {
+            // Create new log entry if it doesn't exist
+            usePipelineStore.getState().addExecutionLog({
+              nodeId,
+              nodeLabel: node.label,
+              nodeType: node.type,
+              status: 'success',
+              completedAt: new Date(),
+              duration,
+              output: result,
+              input: inputDataForLog,
+              request: executionResult?.request,
+              response: executionResult?.response,
+            });
           }
 
           updateNodeStatus(nodeId, 'success');
         } catch (error: any) {
+          console.error(`[PipelineExecution] Error in node ${nodeId} (${node.type}):`, error);
+          const endTime = Date.now();
+          const startTime = usePipelineStore.getState().currentExecution?.logs.find(
+            l => l.nodeId === nodeId
+          )?.startedAt;
+          const duration = startTime ? endTime - new Date(startTime).getTime() : 0;
+
+          // Update execution log with error details
+          const existingErrorLog = usePipelineStore.getState().currentExecution?.logs.find(
+            l => l.nodeId === nodeId
+          );
+          
+          const errorResponse = (error as any).response || (error.response ? {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data,
+          } : undefined);
+
+          if (existingErrorLog) {
+            usePipelineStore.getState().updateExecutionLog(nodeId, {
+              status: 'error',
+              completedAt: new Date(),
+              duration,
+              error: error.message || 'Execution failed',
+              input: inputDataForLog,
+              request: (error as any).request,
+              response: errorResponse,
+            });
+          } else {
+            // Create new log entry if it doesn't exist
+            usePipelineStore.getState().addExecutionLog({
+              nodeId,
+              nodeLabel: node.label,
+              nodeType: node.type,
+              status: 'error',
+              completedAt: new Date(),
+              duration,
+              error: error.message || 'Execution failed',
+              input: inputDataForLog,
+              request: (error as any).request,
+              response: errorResponse,
+            });
+          }
+
           updateNodeStatus(nodeId, 'error', error.message || 'Execution failed');
         }
       }
 
       if (!cancelled) {
-        usePipelineStore.getState().stopExecution();
+        // Mark execution as completed - update currentExecution to keep logs visible
+        const state = usePipelineStore.getState();
+        if (state.currentExecution) {
+          const completedExecution = {
+            ...state.currentExecution,
+            completedAt: new Date(),
+            status: 'completed' as const,
+          };
+          // Update execution history and keep currentExecution for viewing results
+          usePipelineStore.setState({
+            executionHistory: [completedExecution, ...state.executionHistory].slice(0, 50),
+            currentExecution: completedExecution, // Keep currentExecution so users can view results
+            isExecuting: false,
+          });
+        } else {
+          usePipelineStore.getState().stopExecution();
+        }
+        
         if (currentPipeline) {
           usePipelineStore.getState().setCurrentPipeline({
             ...currentPipeline,
@@ -117,7 +287,8 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
     return () => {
       cancelled = true;
     };
-  }, [isExecuting, currentPipeline, executionOrder, updateNodeStatus, apiClient]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isExecuting, currentPipeline?.id, executionOrder.join(','), apiClient]);
 
   if (!isExecuting || !currentPipeline) {
     return null;
@@ -195,46 +366,6 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
   );
 };
 
-// Helper functions
-function getInputPDB(
-  nodeId: string,
-  nodes: any[],
-  edges: Array<{ source: string; target: string }>
-): string | null {
-  const incomingEdges = edges.filter((e) => e.target === nodeId);
-  if (incomingEdges.length === 0) return null;
-
-  const sourceNode = nodes.find((n) => n.id === incomingEdges[0].source);
-  if (!sourceNode) return null;
-
-  if (sourceNode.type === 'input_node') {
-    return sourceNode.config?.filename || null;
-  }
-
-  if (sourceNode.result_metadata?.output_file) {
-    return sourceNode.result_metadata.output_file;
-  }
-
-  return null;
-}
-
-function getInputSequence(
-  nodeId: string,
-  nodes: any[],
-  edges: Array<{ source: string; target: string }>
-): string | null {
-  const incomingEdges = edges.filter((e) => e.target === nodeId);
-  if (incomingEdges.length === 0) return null;
-
-  const sourceNode = nodes.find((n) => n.id === incomingEdges[0].source);
-  if (!sourceNode) return null;
-
-  if (sourceNode.type === 'proteinmpnn_node') {
-    return sourceNode.result_metadata?.sequence || null;
-  }
-
-  return null;
-}
 
 
 
