@@ -1,0 +1,56 @@
+{
+  "metadata": {
+    "type": "message_input_node",
+    "label": "Code Execution",
+    "icon": "MessageSquare",
+    "color": "#10b981",
+    "borderColor": "border-green-500",
+    "bgColor": "bg-green-500",
+    "description": "Execute JavaScript code for testing and processing"
+  },
+  "schema": {
+    "code": {
+      "type": "textarea",
+      "required": true,
+      "default": "// Access input data via 'input' object\n// Access node config via 'config' object\n// Access node metadata via 'node' object\n// Return the result\n\nconst message = config.message || 'Hello from code execution!';\nconsole.log('[Message Input Node]', message);\n\nreturn {\n  message: message,\n  executedAt: new Date().toISOString(),\n  inputKeys: Object.keys(input),\n  configKeys: Object.keys(config)\n};",
+      "placeholder": "// Write your JavaScript code here...",
+      "label": "Code",
+      "helpText": "JavaScript code to execute. Use 'input' for input data, 'config' for node config, and 'node' for node metadata. Return the result."
+    },
+    "message": {
+      "type": "string",
+      "required": false,
+      "default": "Hello from code execution!",
+      "placeholder": "Enter a message...",
+      "label": "Message",
+      "helpText": "Optional message that can be accessed in code via config.message"
+    }
+  },
+  "handles": {
+    "inputs": [
+      {
+        "id": "input",
+        "type": "target",
+        "position": "left",
+        "dataType": "any"
+      }
+    ],
+    "outputs": [
+      {
+        "id": "result",
+        "type": "source",
+        "position": "right",
+        "dataType": "any"
+      }
+    ]
+  },
+  "execution": {
+    "type": "code_execution",
+    "code": "{{config.code}}"
+  },
+  "defaultConfig": {
+    "code": "// Access input data via 'input' object\n// Access node config via 'config' object\n// Access node metadata via 'node' object\n// Return the result\n\nconst message = config.message || 'Hello from code execution!';\nconsole.log('[Message Input Node]', message);\n\nreturn {\n  message: message,\n  executedAt: new Date().toISOString(),\n  inputKeys: Object.keys(input),\n  configKeys: Object.keys(config)\n};",
+    "message": "Hello from code execution!"
+  }
+}
+

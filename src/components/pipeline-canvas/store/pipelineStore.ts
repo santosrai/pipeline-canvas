@@ -15,6 +15,20 @@ export interface ExecutionLogEntry {
   error?: string;
   input?: Record<string, any>;
   output?: Record<string, any>;
+  // HTTP request/response details (similar to n8n)
+  request?: {
+    method?: string;
+    url?: string;
+    headers?: Record<string, string>;
+    queryParams?: Record<string, any>;
+    body?: any;
+  };
+  response?: {
+    status?: number;
+    statusText?: string;
+    headers?: Record<string, string>;
+    data?: any;
+  };
 }
 
 // Execution session for tracking full pipeline runs
@@ -253,6 +267,27 @@ export const usePipelineStore = create<PipelineState>()(
         const { currentPipeline } = get();
         if (!currentPipeline) return;
         
+        // Validate input nodes have required configuration
+        const inputNodes = currentPipeline.nodes.filter(n => n.type === 'input_node');
+        for (const node of inputNodes) {
+          if (!node.config?.filename) {
+            // Update node status to show error
+            const nodeId = node.id;
+            set({
+              currentPipeline: {
+                ...currentPipeline,
+                nodes: currentPipeline.nodes.map((n) =>
+                  n.id === nodeId
+                    ? { ...n, status: 'error' as NodeStatus, error: 'No filename specified for input node' }
+                    : n
+                ),
+              },
+            });
+            // Don't start execution if validation fails
+            return;
+          }
+        }
+        
         // Topological sort for execution order
         const executionOrder = topologicalSort(currentPipeline.nodes, currentPipeline.edges);
         
@@ -268,7 +303,8 @@ export const usePipelineStore = create<PipelineState>()(
           isExecuting: true,
           executionOrder,
           currentExecution: newExecution,
-          viewMode: 'executions', // Auto-switch to executions view
+          // Don't auto-switch to executions view - stay in editor so users can see output
+          // viewMode: 'executions', // Removed - keep current view mode
           currentPipeline: {
             ...currentPipeline,
             status: 'running',
@@ -292,7 +328,12 @@ export const usePipelineStore = create<PipelineState>()(
           };
           set({
             executionHistory: [completedExecution, ...executionHistory].slice(0, 50), // Keep last 50
-            currentExecution: null,
+            // Keep currentExecution so users can view results after execution completes
+            // It will be cleared when a new execution starts
+            currentExecution: {
+              ...completedExecution,
+              status: 'completed',
+            },
           });
         }
         

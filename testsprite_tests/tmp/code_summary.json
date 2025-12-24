@@ -1,0 +1,100 @@
+{
+  "tech_stack": [
+    "TypeScript",
+    "React",
+    "Vite",
+    "Tailwind CSS",
+    "Zustand",
+    "Python",
+    "FastAPI",
+    "Uvicorn",
+    "Molstar",
+    "ReactFlow",
+    "Monaco Editor",
+    "Axios"
+  ],
+  "features": [
+    {
+      "name": "Pipeline Canvas",
+      "description": "Visual workflow system for designing and executing protein engineering pipelines with drag-and-drop nodes",
+      "files": [
+        "src/components/pipeline-canvas/components/PipelineCanvas.tsx",
+        "src/components/pipeline-canvas/components/PipelineNodePalette.tsx",
+        "src/components/pipeline-canvas/components/PipelineManager.tsx",
+        "src/components/pipeline-canvas/components/PipelineExecution.tsx"
+      ]
+    },
+    {
+      "name": "HTTP Request Node",
+      "description": "HTTP Request node for making API calls to external endpoints with configurable method, URL, authentication, headers, query params, and body",
+      "files": [
+        "src/components/pipeline-canvas/nodes/http_request_node/node.json",
+        "src/components/pipeline-canvas/components/PipelineNodeConfig.tsx",
+        "src/components/pipeline-canvas/utils/executionEngine.ts"
+      ]
+    },
+    {
+      "name": "Pipeline Node Config",
+      "description": "Configuration panel for pipeline nodes with input/output panels and parameter settings",
+      "files": [
+        "src/components/pipeline-canvas/components/PipelineNodeConfig.tsx"
+      ]
+    },
+    {
+      "name": "Execution Engine",
+      "description": "Node execution system that handles API calls, template resolution, and response processing",
+      "files": [
+        "src/components/pipeline-canvas/utils/executionEngine.ts",
+        "src/components/pipeline-canvas/utils/templateResolver.ts",
+        "src/components/pipeline-canvas/utils/nodeLoader.ts"
+      ]
+    },
+    {
+      "name": "Pipeline Store",
+      "description": "Zustand store for managing pipeline state, nodes, edges, and execution logs",
+      "files": [
+        "src/components/pipeline-canvas/store/pipelineStore.ts"
+      ]
+    },
+    {
+      "name": "Chat Panel",
+      "description": "AI chat interface for natural language interaction with molecular visualization",
+      "files": [
+        "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "name": "Molstar Viewer",
+      "description": "3D molecular structure visualization using Molstar library",
+      "files": [
+        "src/components/MolstarViewer.tsx",
+        "src/utils/molstarBuilder.ts"
+      ]
+    },
+    {
+      "name": "Code Editor",
+      "description": "Monaco editor integration for code editing and execution",
+      "files": [
+        "src/components/CodeEditor.tsx",
+        "src/utils/codeExecutor.ts"
+      ]
+    },
+    {
+      "name": "File Browser",
+      "description": "File management interface for browsing and uploading PDB files",
+      "files": [
+        "src/components/FileBrowser.tsx",
+        "src/components/FileEditor.tsx",
+        "src/components/PDBFileUpload.tsx"
+      ]
+    },
+    {
+      "name": "Settings Dialog",
+      "description": "Application settings configuration dialog",
+      "files": [
+        "src/components/SettingsDialog.tsx"
+      ]
+    }
+  ]
+}
+

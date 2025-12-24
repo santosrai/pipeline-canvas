@@ -9,6 +9,104 @@
     "description": "De novo backbone design"
   },
   "schema": {
+    "method": {
+      "type": "select",
+      "required": true,
+      "default": "POST",
+      "label": "Method",
+      "options": [
+        { "value": "GET", "label": "GET" },
+        { "value": "POST", "label": "POST" },
+        { "value": "PUT", "label": "PUT" },
+        { "value": "PATCH", "label": "PATCH" },
+        { "value": "DELETE", "label": "DELETE" }
+      ],
+      "helpText": "HTTP method for the request"
+    },
+    "url": {
+      "type": "string",
+      "required": true,
+      "default": "/rfdiffusion/run",
+      "placeholder": "/rfdiffusion/run",
+      "label": "URL",
+      "helpText": "API endpoint URL (relative or absolute)"
+    },
+    "api_key": {
+      "type": "string",
+      "required": false,
+      "default": "",
+      "placeholder": "Enter NVIDIA API key (optional)",
+      "label": "API Key",
+      "helpText": "NVIDIA API key for RFdiffusion. Leave empty to use global API key from settings."
+    },
+    "send_query_params": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "label": "Send Query Parameters",
+      "helpText": "Include query parameters in the URL"
+    },
+    "query_params": {
+      "type": "json",
+      "required": false,
+      "default": "{}",
+      "label": "Query Parameters",
+      "helpText": "JSON object with query parameters (e.g., {\"key\": \"value\"})"
+    },
+    "send_headers": {
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "label": "Send Headers",
+      "helpText": "Include custom headers in the request"
+    },
+    "custom_headers": {
+      "type": "json",
+      "required": false,
+      "default": "{}",
+      "label": "Custom Headers",
+      "helpText": "JSON object with custom headers (e.g., {\"Content-Type\": \"application/json\"})"
+    },
+    "send_body": {
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "label": "Send Body",
+      "helpText": "Include request body"
+    },
+    "body_content_type": {
+      "type": "select",
+      "required": false,
+      "default": "json",
+      "label": "Body Content Type",
+      "options": [
+        { "value": "json", "label": "JSON" },
+        { "value": "form-data", "label": "Form Data" },
+        { "value": "x-www-form-urlencoded", "label": "Form URL Encoded" },
+        { "value": "raw", "label": "Raw" }
+      ],
+      "helpText": "Content type for the request body"
+    },
+    "body_specify": {
+      "type": "select",
+      "required": false,
+      "default": "json",
+      "label": "Specify Body",
+      "options": [
+        { "value": "json", "label": "Using JSON" },
+        { "value": "expression", "label": "Using Expression" },
+        { "value": "fixed", "label": "Fixed" }
+      ],
+      "helpText": "How to specify the body content"
+    },
+    "body_json": {
+      "type": "textarea",
+      "required": false,
+      "default": "",
+      "placeholder": "{\"pdb_file\": \"{{input.target}}\", \"contigs\": \"{{config.contigs}}\", \"num_designs\": \"{{config.num_designs}}\"}",
+      "label": "JSON",
+      "helpText": "JSON body content (supports template variables like {{input.target}})"
+    },
     "contigs": {
       "type": "string",
       "required": false,
@@ -46,15 +144,38 @@
   },
   "execution": {
     "type": "api_call",
-    "endpoint": "/rfdiffusion/run",
-    "method": "POST",
+    "endpoint": "{{config.url}}",
+    "method": "{{config.method}}",
+    "queryParams": "{{config.query_params}}",
+    "headers": {
+      "Authorization": "Bearer {{config.api_key}}",
+      "__custom_headers__": "{{config.custom_headers}}",
+      "__send_headers__": "{{config.send_headers}}"
+    },
     "payload": {
-      "pdb_file": "{{input.target}}",
-      "contigs": "{{config.contigs}}",
-      "num_designs": "{{config.num_designs}}"
+      "__send_body__": "{{config.send_body}}",
+      "__body_content_type__": "{{config.body_content_type}}",
+      "__body_specify__": "{{config.body_specify}}",
+      "__body_json__": "{{config.body_json}}",
+      "__legacy_payload__": {
+        "pdb_file": "{{input.target}}",
+        "contigs": "{{config.contigs}}",
+        "num_designs": "{{config.num_designs}}"
+      }
     }
   },
   "defaultConfig": {
+    "method": "POST",
+    "url": "/rfdiffusion/run",
+    "api_key": "",
+    "send_query_params": false,
+    "query_params": "{}",
+    "send_headers": true,
+    "custom_headers": "{}",
+    "send_body": true,
+    "body_content_type": "json",
+    "body_specify": "json",
+    "body_json": "{\"pdb_file\": \"{{input.target}}\", \"contigs\": \"{{config.contigs}}\", \"num_designs\": \"{{config.num_designs}}\"}",
     "contigs": "50",
     "num_designs": 1
   }

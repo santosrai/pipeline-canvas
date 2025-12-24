@@ -1,0 +1,19 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:3000",
+  "executionArgs": {
+    "projectName": "novoprotien-ai",
+    "projectPath": "/Users/alizabista/Downloads/Dev-Folder/novoprotien-ai",
+    "testIds": [
+      "TC001",
+      "TC006"
+    ],
+    "additionalInstruction": "Focus on verifying that the HTTP Request node executes successfully and displays the response in the OUTPUT panel with JSON view. The output should show the response data from the API call.",
+    "envs": {
+      "API_KEY": "sk-user-zN5XFx6DHYIrwt9vnShwzeec2N-aOuhSW4Oko5v78mI3MZL3aJK0ZDPqYsLPUs1dSCVjXim3bcJDwkfKf2sWgPP-3gqwbNhOEJ7kdnpKcCx-WfQk46KYilhJ9td7n0GmHeY"
+    }
+  },
+  "proxy": "http://aaa796ad-9990-45e8-aa18-f89a51b8aafd:PIMBhPndE8BdHmTTtxpvHWL9tBc2z0Fk@tun.testsprite.com:8080"
+}

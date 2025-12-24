@@ -331,5 +331,75 @@
       "D",
       "E"
     ]
+  },
+  "158d430dfc014da2adf5113fea84da8a": {
+    "file_id": "158d430dfc014da2adf5113fea84da8a",
+    "filename": "1R42.pdb",
+    "stored_path": "uploads/pdb/158d430dfc014da2adf5113fea84da8a.pdb",
+    "size": 504711,
+    "atoms": 5511,
+    "chains": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ]
+  },
+  "6e161807de7c4c8c89d5dce6c6db67bc": {
+    "file_id": "6e161807de7c4c8c89d5dce6c6db67bc",
+    "filename": "1R42.pdb",
+    "stored_path": "uploads/pdb/6e161807de7c4c8c89d5dce6c6db67bc.pdb",
+    "size": 504711,
+    "atoms": 5511,
+    "chains": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ]
+  },
+  "89838dbfb38442df8024e00349f2138a": {
+    "file_id": "89838dbfb38442df8024e00349f2138a",
+    "filename": "1R42.pdb",
+    "stored_path": "uploads/pdb/89838dbfb38442df8024e00349f2138a.pdb",
+    "size": 504711,
+    "atoms": 5511,
+    "chains": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ]
+  },
+  "3c5e336ab0444d3383ec80dd31c1ccc3": {
+    "file_id": "3c5e336ab0444d3383ec80dd31c1ccc3",
+    "filename": "1R42.pdb",
+    "stored_path": "uploads/pdb/3c5e336ab0444d3383ec80dd31c1ccc3.pdb",
+    "size": 504711,
+    "atoms": 5511,
+    "chains": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ]
+  },
+  "0d2802c0d3d44b1c82187672e503d7e2": {
+    "file_id": "0d2802c0d3d44b1c82187672e503d7e2",
+    "filename": "1R42.pdb",
+    "stored_path": "uploads/pdb/0d2802c0d3d44b1c82187672e503d7e2.pdb",
+    "size": 504711,
+    "atoms": 5511,
+    "chains": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ]
   }
 }

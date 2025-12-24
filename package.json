@@ -9,12 +9,14 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "start:server": "./.venv/bin/uvicorn server.app:app --host 0.0.0.0 --port 8787",
-    "dev:all": "npm-run-all --parallel start:server dev"
+    "dev:all": "npm-run-all --parallel start:server dev",
+    "build:library": "cd src/components/pipeline-canvas && npm run build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.1",
     "@modelcontextprotocol/server-puppeteer": "^2025.5.12",
     "@monaco-editor/react": "^4.6.0",
+    "@types/react-router-dom": "^5.3.3",
     "@types/uuid": "^10.0.0",
     "@upstash/context7-mcp": "^1.0.14",
     "axios": "^1.7.3",
@@ -26,6 +28,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.11.0",
     "reactflow": "^11.11.4",
     "uuid": "^11.1.0",
     "zustand": "^4.5.4"

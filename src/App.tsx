@@ -154,6 +154,16 @@ function App() {
                 >
                   <Workflow className="w-4 h-4" />
                 </button>
+                <a
+                  href="/pipeline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2 h-8 flex items-center gap-1 text-xs bg-white text-gray-700 hover:bg-gray-50 border-l border-gray-300"
+                  title="Open pipeline canvas in full screen"
+                >
+                  <Workflow className="w-3 h-3" />
+                  <span className="text-[10px]">Full</span>
+                </a>
               </div>
             </div>
 

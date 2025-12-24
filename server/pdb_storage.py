@@ -34,10 +34,18 @@ def _save_index(index: Dict[str, Dict[str, str]]) -> None:
     INDEX_FILE.write_text(json.dumps(index, indent=2), encoding="utf-8")
 
 
-def _analyze_pdb(content: str) -> Tuple[int, List[str]]:
-    """Return atom count and list of chain identifiers detected in a PDB file."""
+def _analyze_pdb(content: str) -> Tuple[int, List[str], Dict[str, int]]:
+    """Return atom count, list of chain identifiers, and residue counts per chain."""
     atoms = 0
     chains = set()
+    chain_residues: Dict[str, set] = {}
+    
+    # Standard amino acid three-letter codes
+    aa_codes = {
+        'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE',
+        'LEU', 'LYS', 'MET', 'PHE', 'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL'
+    }
+    
     for line in content.splitlines():
         if not line:
             continue
@@ -45,8 +53,56 @@ def _analyze_pdb(content: str) -> Tuple[int, List[str]]:
         if record in {"ATOM", "HETATM"}:
             atoms += 1
             if len(line) >= 22:
-                chains.add(line[21].strip() or "?")
-    return atoms, sorted(chain for chain in chains if chain)
+                chain_id = line[21].strip() or "?"
+                chains.add(chain_id)
+                
+                # Extract residue information for CA atoms (protein residues)
+                if len(line) >= 26 and line[12:16].strip() == 'CA':
+                    res_name = line[17:20].strip()
+                    if res_name in aa_codes:
+                        try:
+                            res_seq = int(line[22:26].strip())
+                            if chain_id not in chain_residues:
+                                chain_residues[chain_id] = set()
+                            chain_residues[chain_id].add(res_seq)
+                        except (ValueError, IndexError):
+                            pass
+    
+    # Convert sets to counts
+    chain_residue_counts = {
+        chain: len(residues) 
+        for chain, residues in chain_residues.items()
+    }
+    
+    return atoms, sorted(chain for chain in chains if chain), chain_residue_counts
+
+
+def _suggest_rfdiffusion_contigs(chain_residue_counts: Dict[str, int]) -> str:
+    """Suggest RFdiffusion contigs based on chain residue counts."""
+    if not chain_residue_counts:
+        return "50-150"  # Default generic contig
+    
+    # Get the first chain (usually chain A)
+    first_chain = sorted(chain_residue_counts.keys())[0] if chain_residue_counts else None
+    if not first_chain:
+        return "50-150"
+    
+    residue_count = chain_residue_counts[first_chain]
+    
+    # Suggest contigs based on structure size
+    if residue_count < 50:
+        # Small structure - suggest full length
+        return f"{first_chain}1-{residue_count}"
+    elif residue_count < 150:
+        # Medium structure - suggest middle portion
+        start = max(1, residue_count // 4)
+        end = min(residue_count, start + 100)
+        return f"{first_chain}{start}-{end}"
+    else:
+        # Large structure - suggest a 100-residue window
+        start = residue_count // 4
+        end = start + 100
+        return f"{first_chain}{start}-{end}"
 
 
 def save_uploaded_pdb(filename: str, content: bytes) -> Dict[str, object]:
@@ -55,7 +111,11 @@ def save_uploaded_pdb(filename: str, content: bytes) -> Dict[str, object]:
         raise HTTPException(status_code=400, detail="Only .pdb files are supported")
 
     text_content = content.decode("utf-8", errors="ignore")
-    atoms, chains = _analyze_pdb(text_content)
+    atoms, chains, chain_residue_counts = _analyze_pdb(text_content)
+    
+    # Calculate suggested RFdiffusion parameters
+    suggested_contigs = _suggest_rfdiffusion_contigs(chain_residue_counts)
+    total_residues = sum(chain_residue_counts.values())
 
     file_id = uuid.uuid4().hex
     stored_name = f"{file_id}.pdb"
@@ -70,6 +130,9 @@ def save_uploaded_pdb(filename: str, content: bytes) -> Dict[str, object]:
         "size": len(content),
         "atoms": atoms,
         "chains": chains,
+        "chain_residue_counts": chain_residue_counts,
+        "total_residues": total_residues,
+        "suggested_contigs": suggested_contigs,
     }
     index[file_id] = metadata
     _save_index(index)

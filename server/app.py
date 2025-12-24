@@ -609,6 +609,9 @@ async def upload_pdb(request: Request, file: UploadFile = File(...)):
                 "size": metadata.get("size"),
                 "atoms": metadata.get("atoms"),
                 "chains": metadata.get("chains", []),
+                "chain_residue_counts": metadata.get("chain_residue_counts", {}),
+                "total_residues": metadata.get("total_residues", 0),
+                "suggested_contigs": metadata.get("suggested_contigs", "50-150"),
             },
         }
     except HTTPException as exc:

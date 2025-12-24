@@ -34,8 +34,6 @@ import {
   applyUniformColor,
   applyColorScheme,
   addRepresentation,
-  hideRepresentations,
-  showRepresentations,
   toggleRibbon,
   addLabels,
   subscribeToSelectionChanges,

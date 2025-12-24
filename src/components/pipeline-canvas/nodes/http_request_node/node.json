@@ -1,0 +1,311 @@
+{
+  "metadata": {
+    "type": "http_request_node",
+    "label": "HTTP Request",
+    "icon": "Globe",
+    "color": "#3b82f6",
+    "borderColor": "border-blue-500",
+    "bgColor": "bg-blue-500",
+    "description": "Make HTTP requests to any API endpoint"
+  },
+  "schema": {
+    "method": {
+      "type": "select",
+      "required": true,
+      "default": "GET",
+      "label": "Method",
+      "options": [
+        { "value": "GET", "label": "GET" },
+        { "value": "POST", "label": "POST" },
+        { "value": "PUT", "label": "PUT" },
+        { "value": "PATCH", "label": "PATCH" },
+        { "value": "DELETE", "label": "DELETE" },
+        { "value": "HEAD", "label": "HEAD" },
+        { "value": "OPTIONS", "label": "OPTIONS" }
+      ],
+      "helpText": "HTTP method for the request"
+    },
+    "url": {
+      "type": "string",
+      "required": true,
+      "default": "https://jsonplaceholder.typicode.com/todos/1",
+      "placeholder": "https://api.example.com/endpoint",
+      "label": "URL",
+      "helpText": "Full URL for the HTTP request (supports template variables like {{input.field}})"
+    },
+    "authentication": {
+      "type": "select",
+      "required": false,
+      "default": "none",
+      "label": "Authentication",
+      "options": [
+        { "value": "none", "label": "None" },
+        { "value": "basic", "label": "Basic Auth" },
+        { "value": "bearer", "label": "Bearer Token" },
+        { "value": "custom", "label": "Custom Header" }
+      ],
+      "helpText": "Authentication method for the request"
+    },
+    "basic_auth_username": {
+      "type": "string",
+      "required": false,
+      "default": "",
+      "placeholder": "Username",
+      "label": "Username",
+      "helpText": "Username for Basic Authentication",
+      "showWhen": {
+        "field": "authentication",
+        "value": "basic"
+      }
+    },
+    "basic_auth_password": {
+      "type": "string",
+      "required": false,
+      "default": "",
+      "placeholder": "Password",
+      "label": "Password",
+      "helpText": "Password for Basic Authentication",
+      "showWhen": {
+        "field": "authentication",
+        "value": "basic"
+      }
+    },
+    "bearer_token": {
+      "type": "string",
+      "required": false,
+      "default": "",
+      "placeholder": "Bearer token",
+      "label": "Bearer Token",
+      "helpText": "Bearer token for authentication",
+      "showWhen": {
+        "field": "authentication",
+        "value": "bearer"
+      }
+    },
+    "custom_auth_header_name": {
+      "type": "string",
+      "required": false,
+      "default": "Authorization",
+      "placeholder": "Header name",
+      "label": "Header Name",
+      "helpText": "Custom header name for authentication",
+      "showWhen": {
+        "field": "authentication",
+        "value": "custom"
+      }
+    },
+    "custom_auth_header_value": {
+      "type": "string",
+      "required": false,
+      "default": "",
+      "placeholder": "Header value",
+      "label": "Header Value",
+      "helpText": "Custom header value for authentication",
+      "showWhen": {
+        "field": "authentication",
+        "value": "custom"
+      }
+    },
+    "send_query_params": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "label": "Send Query Parameters",
+      "helpText": "Include query parameters in the URL"
+    },
+    "query_params": {
+      "type": "json",
+      "required": false,
+      "default": "{}",
+      "label": "Query Parameters",
+      "helpText": "JSON object with query parameters (e.g., {\"key\": \"value\", \"page\": 1})",
+      "showWhen": {
+        "field": "send_query_params",
+        "value": true
+      }
+    },
+    "send_headers": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "label": "Send Headers",
+      "helpText": "Include custom headers in the request"
+    },
+    "custom_headers": {
+      "type": "json",
+      "required": false,
+      "default": "{}",
+      "label": "Custom Headers",
+      "helpText": "JSON object with custom headers (e.g., {\"Content-Type\": \"application/json\", \"X-Custom-Header\": \"value\"})",
+      "showWhen": {
+        "field": "send_headers",
+        "value": true
+      }
+    },
+    "send_body": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "label": "Send Body",
+      "helpText": "Include request body (only for POST, PUT, PATCH methods)"
+    },
+    "body_content_type": {
+      "type": "select",
+      "required": false,
+      "default": "json",
+      "label": "Body Content Type",
+      "options": [
+        { "value": "json", "label": "JSON" },
+        { "value": "form-data", "label": "Form Data" },
+        { "value": "x-www-form-urlencoded", "label": "Form URL Encoded" },
+        { "value": "raw", "label": "Raw" },
+        { "value": "text", "label": "Text" },
+        { "value": "xml", "label": "XML" }
+      ],
+      "helpText": "Content type for the request body",
+      "showWhen": {
+        "field": "send_body",
+        "value": true
+      }
+    },
+    "body_specify": {
+      "type": "select",
+      "required": false,
+      "default": "json",
+      "label": "Specify Body",
+      "options": [
+        { "value": "json", "label": "Using JSON" },
+        { "value": "expression", "label": "Using Expression" },
+        { "value": "fixed", "label": "Fixed" }
+      ],
+      "helpText": "How to specify the body content",
+      "showWhen": {
+        "field": "send_body",
+        "value": true
+      }
+    },
+    "body_json": {
+      "type": "textarea",
+      "required": false,
+      "default": "",
+      "placeholder": "{\"key\": \"value\"} or use template variables like {{input.field}}",
+      "label": "JSON",
+      "helpText": "JSON body content (supports template variables like {{input.field}})",
+      "showWhen": {
+        "field": "send_body",
+        "value": true,
+        "and": [
+          {
+            "field": "body_specify",
+            "value": "json"
+          }
+        ]
+      }
+    },
+    "body_raw": {
+      "type": "textarea",
+      "required": false,
+      "default": "",
+      "placeholder": "Raw body content",
+      "label": "Raw Body",
+      "helpText": "Raw body content (for raw, text, or XML content types)",
+      "showWhen": {
+        "field": "send_body",
+        "value": true,
+        "and": [
+          {
+            "field": "body_content_type",
+            "value": ["raw", "text", "xml"]
+          }
+        ]
+      }
+    },
+    "options_timeout": {
+      "type": "number",
+      "required": false,
+      "default": 30000,
+      "min": 1000,
+      "max": 300000,
+      "label": "Timeout (ms)",
+      "helpText": "Request timeout in milliseconds (default: 30000)"
+    },
+    "options_follow_redirects": {
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "label": "Follow Redirects",
+      "helpText": "Automatically follow HTTP redirects"
+    },
+    "options_ignore_ssl_errors": {
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "label": "Ignore SSL Errors",
+      "helpText": "Ignore SSL certificate errors (not recommended for production)"
+    }
+  },
+  "handles": {
+    "inputs": [
+      {
+        "id": "input",
+        "type": "target",
+        "position": "left",
+        "dataType": "any"
+      }
+    ],
+    "outputs": [
+      {
+        "id": "output",
+        "type": "source",
+        "position": "right",
+        "dataType": "any"
+      }
+    ]
+  },
+  "execution": {
+    "type": "api_call",
+    "endpoint": "{{config.url}}",
+    "method": "{{config.method}}",
+    "queryParams": "{{config.query_params}}",
+    "headers": {
+      "__send_headers__": "{{config.send_headers}}",
+      "__custom_headers__": "{{config.custom_headers}}",
+      "__auth_type__": "{{config.authentication}}",
+      "__basic_auth_username__": "{{config.basic_auth_username}}",
+      "__basic_auth_password__": "{{config.basic_auth_password}}",
+      "__bearer_token__": "{{config.bearer_token}}",
+      "__custom_auth_header_name__": "{{config.custom_auth_header_name}}",
+      "__custom_auth_header_value__": "{{config.custom_auth_header_value}}"
+    },
+    "payload": {
+      "__send_body__": "{{config.send_body}}",
+      "__body_content_type__": "{{config.body_content_type}}",
+      "__body_specify__": "{{config.body_specify}}",
+      "__body_json__": "{{config.body_json}}",
+      "__body_raw__": "{{config.body_raw}}"
+    }
+  },
+  "defaultConfig": {
+    "method": "GET",
+    "url": "https://jsonplaceholder.typicode.com/todos/1",
+    "authentication": "none",
+    "basic_auth_username": "",
+    "basic_auth_password": "",
+    "bearer_token": "",
+    "custom_auth_header_name": "Authorization",
+    "custom_auth_header_value": "",
+    "send_query_params": false,
+    "query_params": "{}",
+    "send_headers": false,
+    "custom_headers": "{}",
+    "send_body": false,
+    "body_content_type": "json",
+    "body_specify": "json",
+    "body_json": "",
+    "body_raw": "",
+    "options_timeout": 30000,
+    "options_follow_redirects": true,
+    "options_ignore_ssl_errors": false
+  }
+}
+

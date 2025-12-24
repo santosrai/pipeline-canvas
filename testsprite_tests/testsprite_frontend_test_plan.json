@@ -1,0 +1,553 @@
+[
+  {
+    "id": "TC001",
+    "title": "Execute GET request with absolute URL and no authentication",
+    "description": "Verify that a GET request can be executed successfully using an absolute URL without any authentication method.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Add HTTP Request node to the pipeline canvas"
+      },
+      {
+        "type": "action",
+        "description": "Select HTTP method as GET"
+      },
+      {
+        "type": "action",
+        "description": "Input an absolute URL without any template variables"
+      },
+      {
+        "type": "action",
+        "description": "Select authentication type as None"
+      },
+      {
+        "type": "action",
+        "description": "Execute the node"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the request executes successfully and the output panel shows HTTP 200 status code"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the request URL is exactly as input"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the output panel displays request headers, empty query parameters, request body as empty, and the response data correctly"
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Execute POST request with URL template variables and Basic Authentication",
+    "description": "Verify that a POST request executes correctly with URL containing template variables resolved at runtime and using Basic Auth authentication.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Add HTTP Request node to the pipeline canvas"
+      },
+      {
+        "type": "action",
+        "description": "Select HTTP method as POST"
+      },
+      {
+        "type": "action",
+        "description": "Input a URL with template variables like '{{input.apiBase}}/resource'"
+      },
+      {
+        "type": "action",
+        "description": "Select authentication type as Basic Auth and enter username and password"
+      },
+      {
+        "type": "action",
+        "description": "Provide request body as JSON with template variables for some fields"
+      },
+      {
+        "type": "action",
+        "description": "Execute the node with context input providing values for template variables"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify template variables are resolved correctly before sending"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the Authorization header contains the Basic Auth credentials correctly encoded"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the request body matches the templated and rendered JSON"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the response status and body are shown correctly in the output panel"
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Headers and query parameters with JSON editor and dynamic templating",
+    "description": "Verify that headers and query parameters can be configured using JSON editors supporting template variables and toggling fields on/off, and that these are correctly included in the request.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Add HTTP Request node and set method to GET"
+      },
+      {
+        "type": "action",
+        "description": "Enter a valid request URL"
+      },
+      {
+        "type": "action",
+        "description": "Open headers JSON editor and input headers including template variables such as 'X-Custom-Header': '{{config.token}}'"
+      },
+      {
+        "type": "action",
+        "description": "Toggle some header fields on and off"
+      },
+      {
+        "type": "action",
+        "description": "Open query parameters JSON editor and input some query parameters with template variables"
+      },
+      {
+        "type": "action",
+        "description": "Execute the node providing context values for template variables"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that only toggled-on header fields are sent"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify template variables in headers and query parameters are properly resolved"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the final request URL includes the correctly encoded query parameters"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the output panel shows the reflected headers and query parameters as sent"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Request body with different content types and templating",
+    "description": "Verify support for JSON, Form Data, Form URL Encoded, raw text bodies, as well as use of template expressions in body content.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Add HTTP Request node and select POST method"
+      },
+      {
+        "type": "action",
+        "description": "Configure request body as JSON with template variables embedded"
+      },
+      {
+        "type": "action",
+        "description": "Execute node and verify POST body is sent as application/json"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify request body matches JSON rendered from template variables"
+      },
+      {
+        "type": "action",
+        "description": "Change body type to Form Data and input key-value pairs with templated values"
+      },
+      {
+        "type": "action",
+        "description": "Execute node and verify correct multipart/form-data encoding and templated values applied"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify Form Data body fields correctly match rendered template values"
+      },
+      {
+        "type": "action",
+        "description": "Change content type to Form URL Encoded and input templated key-value pairs"
+      },
+      {
+        "type": "action",
+        "description": "Execute node and verify application/x-www-form-urlencoded body with templated substitutions"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the body is properly encoded query string matching template evaluation"
+      },
+      {
+        "type": "action",
+        "description": "Change body type to Raw Text and input template expression string"
+      },
+      {
+        "type": "action",
+        "description": "Execute node"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify raw text body is sent exactly as rendered from template"
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Authentication methods validation: Basic Auth, Bearer Token and Custom Headers",
+    "description": "Verify that each supported authentication method sets the correct headers and payloads as per specification.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Add HTTP Request node and set method to GET"
+      },
+      {
+        "type": "action",
+        "description": "Select Basic Auth, enter valid username and password"
+      },
+      {
+        "type": "action",
+        "description": "Execute the request"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify Authorization header contains 'Basic' with base64 encoded credentials"
+      },
+      {
+        "type": "action",
+        "description": "Change authentication to Bearer Token and enter token string"
+      },
+      {
+        "type": "action",
+        "description": "Execute the request"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify Authorization header contains 'Bearer' followed by token"
+      },
+      {
+        "type": "action",
+        "description": "Change authentication to Custom Header and configure header key-value pairs"
+      },
+      {
+        "type": "action",
+        "description": "Execute the request"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the custom headers are included properly in the request"
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Response panel displays detailed request/response with multiple views and error states",
+    "description": "Verify the output panel shows execution status, HTTP status code, request and response headers and bodies, and supports viewing response in table, JSON and schema formats. Verify error message display with network errors and HTTP error statuses.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Execute a successful HTTP request"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the output panel shows HTTP status code and execution details"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify request and response headers and bodies are visible correctly"
+      },
+      {
+        "type": "action",
+        "description": "Switch responses views between Table, JSON and Schema tabs"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify all views render the response data accurately"
+      },
+      {
+        "type": "action",
+        "description": "Execute a request to a non-existing endpoint triggering 404"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify error message and response body details are shown in error panel"
+      },
+      {
+        "type": "action",
+        "description": "Simulate a network failure (e.g. no internet connection)"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify network error message is displayed with suggestions in output panel"
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Template variable syntax validation and live preview",
+    "description": "Verify that template variables are validated in real-time for URL, headers, query params, and request body, and invalid syntax is flagged, preventing node execution.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Input an invalid templated URL such as '{{input.missing'"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify validation error is shown immediately with descriptive message"
+      },
+      {
+        "type": "action",
+        "description": "Input header JSON with invalid template syntax"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify validation error displayed preventing node execution"
+      },
+      {
+        "type": "action",
+        "description": "Correct the template syntax in all fields"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify live validation passes with no errors and variable previews are shown"
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Execution engine integration and logging verification",
+    "description": "Verify that the node integrates correctly with the pipeline execution engine, capturing full request and response data in logs accessible through the pipeline store, and that chaining response data to subsequent nodes is supported.",
+    "category": "integration",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Execute HTTP Request node within a pipeline with proper inputs"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the execution engine logs contain full request method, URL, headers, body, response status, headers, and body"
+      },
+      {
+        "type": "action",
+        "description": "Chain output from HTTP Request node to a subsequent node using the execution context"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the subsequent node receives the correct parsed response data as input"
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Advanced options: timeout, follow redirects, SSL verification, and response format",
+    "description": "Verify that timeout settings abort long requests, follow redirects can be toggled, SSL verification can be enabled/disabled, and response format options (raw, parsed JSON, etc.) render accordingly.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Configure HTTP Request node with a very low timeout"
+      },
+      {
+        "type": "action",
+        "description": "Execute a request expected to take longer than timeout"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the request is aborted and timeout error message is displayed"
+      },
+      {
+        "type": "action",
+        "description": "Toggle follow redirects off and execute a request to a URL that returns HTTP 3xx"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the response status is the redirect code and request does not follow"
+      },
+      {
+        "type": "action",
+        "description": "Disable SSL verification and execute a request to a server with self-signed cert"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the request succeeds without SSL error"
+      },
+      {
+        "type": "action",
+        "description": "Set response format to raw text and execute a request"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the response body is displayed as raw text in the output panel"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Error handling with retries and full error visibility",
+    "description": "Verify that when network or HTTP errors occur, detailed error information including response body and actionable retry suggestions are shown, and retry logic can be triggered.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Execute a request to a server returning HTTP 500"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify error panel displays HTTP code, response body, stack trace if available, and retry suggestion"
+      },
+      {
+        "type": "action",
+        "description": "Trigger the retry action from the error panel"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the request is retried and new response or error is shown correctly"
+      },
+      {
+        "type": "action",
+        "description": "Simulate network disconnection mid-request"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify network error message is displayed with details and retry option"
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Negative test: Invalid HTTP method selection",
+    "description": "Verify the node handles unsupported or invalid HTTP methods gracefully by preventing execution and showing appropriate error messages.",
+    "category": "error handling",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Manually set the HTTP method to an unsupported value via configuration"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify validation error is shown preventing node execution"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Edge case: Empty URL and missing required fields",
+    "description": "Verify that an empty URL or other required fields not set trigger validation errors and disable execution.",
+    "category": "error handling",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Leave the URL field empty in node configuration"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify input validation error about missing URL is shown"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to execute node"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify execution is prevented and informative error is displayed"
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Relative URL resolution",
+    "description": "Verify that relative URLs are correctly resolved against a base URL defined in the pipeline environment or node configuration before the request is sent.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Configure a relative URL such as '/api/v1/data'"
+      },
+      {
+        "type": "action",
+        "description": "Ensure base URL is defined in pipeline context or node configuration"
+      },
+      {
+        "type": "action",
+        "description": "Execute the node"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the actual request URL sent is the base URL concatenated with the relative path"
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Encoding and special characters handling in query parameters and headers",
+    "description": "Verify that special characters and encoding in query parameters and headers are handled correctly and transmitted as expected.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Set query parameters with values containing spaces, unicode, and reserved URL characters"
+      },
+      {
+        "type": "action",
+        "description": "Set headers with special characters and verify encoding"
+      },
+      {
+        "type": "action",
+        "description": "Execute the HTTP Request node"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify query parameters are URL encoded correctly in the request"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify headers maintain integrity and are accepted by server"
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Consistency of default HTTP method selection",
+    "description": "Verify that the node defaults to POST method if no HTTP method is selected explicitly, and that the UI dropdown reflects this default.",
+    "category": "functional",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Add HTTP Request node and leave HTTP method unset"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the HTTP Method dropdown shows POST as the selected/default value"
+      },
+      {
+        "type": "action",
+        "description": "Execute the node with minimal URL configuration"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the request method used in the sent request is POST"
+      }
+    ]
+  }
+]

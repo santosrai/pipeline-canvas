@@ -9,6 +9,14 @@
     "description": "Sequence design"
   },
   "schema": {
+    "api_key": {
+      "type": "string",
+      "required": false,
+      "default": "",
+      "placeholder": "Enter API key (optional)",
+      "label": "API Key",
+      "helpText": "API key for ProteinMPNN. Leave empty to use global API key from settings."
+    },
     "num_sequences": {
       "type": "number",
       "required": false,
@@ -49,6 +57,9 @@
     "type": "api_call",
     "endpoint": "/proteinmpnn/run",
     "method": "POST",
+    "headers": {
+      "Authorization": "Bearer {{config.api_key}}"
+    },
     "payload": {
       "pdb_file": "{{input.target}}",
       "num_sequences": "{{config.num_sequences}}",
@@ -56,6 +67,7 @@
     }
   },
   "defaultConfig": {
+    "api_key": "",
     "num_sequences": 8,
     "temperature": 0.1
   }
