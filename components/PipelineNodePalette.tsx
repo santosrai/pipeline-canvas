@@ -81,7 +81,7 @@ export const PipelineNodePalette: React.FC = () => {
   };
 
   return (
-    <div className="w-64 bg-[#1e1e32] border-r border-gray-700/50 p-4 flex flex-col h-full">
+    <div className="w-64 bg-[#1e1e32] border-l border-gray-700/50 p-4 flex flex-col h-full">
       <h3 className="text-sm font-semibold text-gray-200 mb-3 flex-shrink-0">Node Palette</h3>
       <div className="space-y-2 overflow-y-auto flex-1 min-h-0">
         {nodeTypes.map((nodeType) => (

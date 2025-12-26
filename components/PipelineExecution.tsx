@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { usePipelineStore, ExecutionSession } from '../store/pipelineStore';
+import { usePipelineStore } from '../store/pipelineStore';
 import { Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { executeNode } from '../utils/executionEngine';
 
@@ -22,21 +22,52 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
   } = usePipelineStore();
 
   useEffect(() => {
-    if (!isExecuting || !currentPipeline || executionOrder.length === 0 || !apiClient) {
+    if (!isExecuting || !currentPipeline || executionOrder.length === 0) {
       return;
+    }
+    
+    // Check if any node in execution order needs apiClient
+    // Input nodes (file_check) don't need apiClient, so allow execution to proceed
+    // The execution engine will handle missing apiClient gracefully
+    const hasInputNodes = executionOrder.some(nodeId => {
+      const node = currentPipeline.nodes.find(n => n.id === nodeId);
+      return node?.type === 'input_node';
+    });
+    
+    // Only warn if apiClient is missing and we have non-input nodes
+    if (!apiClient && !hasInputNodes) {
+      console.warn('[PipelineExecution] apiClient not provided but may be required for node execution');
+      // Still allow execution to proceed - it will fail gracefully if apiClient is needed
     }
 
     let cancelled = false;
 
     const executePipeline = async () => {
+      console.log('[PipelineExecution] Starting execution:', {
+        executionOrder,
+        nodeCount: executionOrder.length,
+        hasApiClient: !!apiClient,
+      });
+      
       for (const nodeId of executionOrder) {
         if (cancelled) break;
 
         const node = currentPipeline.nodes.find((n) => n.id === nodeId);
-        if (!node) continue;
+        if (!node) {
+          console.warn(`[PipelineExecution] Node ${nodeId} not found`);
+          continue;
+        }
+
+        console.log(`[PipelineExecution] Processing node ${nodeId} (${node.type}):`, {
+          status: node.status,
+          label: node.label,
+        });
 
         // Skip if already successful
-        if (node.status === 'success') continue;
+        if (node.status === 'success') {
+          console.log(`[PipelineExecution] Skipping ${nodeId} - already successful`);
+          continue;
+        }
 
         // Capture input data for logging (outside try block for error handling)
         const inputDataForLog: Record<string, any> = {};
@@ -49,11 +80,18 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
           const startTime = Date.now();
 
           // Execute node using dynamic execution engine with logging
+          // For input nodes, apiClient is not needed
           let executionResult: any;
           try {
+            // Create a minimal apiClient for nodes that don't need it
+            const nodeApiClient = apiClient || {
+              post: async () => { throw new Error('apiClient not available'); },
+              get: async () => { throw new Error('apiClient not available'); },
+            };
+            
             executionResult = await executeNode(node, {
               pipeline: currentPipeline,
-              apiClient,
+              apiClient: nodeApiClient,
             });
           } catch (execError: any) {
             console.error(`[PipelineExecution] Error executing node ${nodeId}:`, execError);
@@ -113,23 +151,35 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
               
               const resultMetadata: Record<string, any> = {};
               
-              // Extract common result fields
-              if (result.output_file || result.file) {
-                resultMetadata.output_file = result.output_file || result.file;
-              }
-              if (result.sequence) {
-                resultMetadata.sequence = result.sequence;
-              }
-              if (result.message) {
-                resultMetadata.message = result.message;
-              }
-              if (result.data) {
+              // For input nodes, store all file metadata
+              if (node.type === 'input_node' && result.data) {
+                // Store the full file data including all metadata
+                resultMetadata.file_info = result.data;
+                resultMetadata.type = result.data.type || 'pdb_file';
+                resultMetadata.filename = result.data.filename;
+                resultMetadata.file_id = result.data.file_id;
+                resultMetadata.file_url = result.data.file_url;
+                // Also store in data for consistency
                 resultMetadata.data = result.data;
-              }
-              
-              // Store full result if no specific fields found
-              if (Object.keys(resultMetadata).length === 0 && typeof result === 'object') {
-                Object.assign(resultMetadata, result);
+              } else {
+                // Extract common result fields for other node types
+                if (result.output_file || result.file) {
+                  resultMetadata.output_file = result.output_file || result.file;
+                }
+                if (result.sequence) {
+                  resultMetadata.sequence = result.sequence;
+                }
+                if (result.message) {
+                  resultMetadata.message = result.message;
+                }
+                if (result.data) {
+                  resultMetadata.data = result.data;
+                }
+                
+                // Store full result if no specific fields found
+                if (Object.keys(resultMetadata).length === 0 && typeof result === 'object') {
+                  Object.assign(resultMetadata, result);
+                }
               }
 
               // #region agent log
@@ -204,9 +254,26 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
             });
           }
 
+          console.log(`[PipelineExecution] Node ${nodeId} completed successfully`);
           updateNodeStatus(nodeId, 'success');
         } catch (error: any) {
           console.error(`[PipelineExecution] Error in node ${nodeId} (${node.type}):`, error);
+          const errorResponse = (error as any).response;
+          const errorData = errorResponse?.data;
+          const errorMessage = errorData?.error || errorData?.detail || errorData?.data?.detail || errorData?.response?.data?.detail || error.message;
+          console.error(`[PipelineExecution] Error details:`, {
+            message: error.message,
+            stack: error.stack,
+            response: errorResponse,
+            responseData: errorData,
+            responseStatus: errorResponse?.status,
+            errorMessage: errorMessage,
+            fullErrorData: JSON.stringify(errorData, null, 2)
+          });
+          // Log the actual error message prominently
+          if (errorMessage && errorMessage !== error.message) {
+            console.error(`[PipelineExecution] Server Error Message: ${errorMessage}`);
+          }
           const endTime = Date.now();
           const startTime = usePipelineStore.getState().currentExecution?.logs.find(
             l => l.nodeId === nodeId
@@ -218,7 +285,7 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
             l => l.nodeId === nodeId
           );
           
-          const errorResponse = (error as any).response || (error.response ? {
+          const errorResponseData = (error as any).response || (error.response ? {
             status: error.response.status,
             statusText: error.response.statusText,
             data: error.response.data,
@@ -232,7 +299,7 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
               error: error.message || 'Execution failed',
               input: inputDataForLog,
               request: (error as any).request,
-              response: errorResponse,
+              response: errorResponseData,
             });
           } else {
             // Create new log entry if it doesn't exist
@@ -246,7 +313,7 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
               error: error.message || 'Execution failed',
               input: inputDataForLog,
               request: (error as any).request,
-              response: errorResponse,
+              response: errorResponseData,
             });
           }
 

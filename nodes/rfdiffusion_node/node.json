@@ -107,13 +107,50 @@
       "label": "JSON",
       "helpText": "JSON body content (supports template variables like {{input.target}})"
     },
+    "design_mode": {
+      "type": "select",
+      "required": false,
+      "default": "unconditional",
+      "label": "Design Mode",
+      "options": [
+        { "value": "unconditional", "label": "Unconditional Design" },
+        { "value": "motif_scaffolding", "label": "Motif Scaffolding" },
+        { "value": "partial_diffusion", "label": "Partial Diffusion" }
+      ],
+      "helpText": "Design mode: unconditional (new proteins), motif_scaffolding (around structures), or partial_diffusion (modify regions)"
+    },
     "contigs": {
       "type": "string",
       "required": false,
-      "default": "50",
-      "placeholder": "50",
+      "default": "A50-150",
+      "placeholder": "A50-150",
       "label": "Contigs",
-      "helpText": "Contig specification (e.g., \"50\" or \"A1-50\")"
+      "helpText": "Contig specification (e.g., \"A50-150\" or \"A20-60/0 50-100\")"
+    },
+    "hotspot_res": {
+      "type": "string",
+      "required": false,
+      "default": "",
+      "placeholder": "A50, A51, A52",
+      "label": "Hotspot Residues",
+      "helpText": "Comma-separated list of residues to preserve (e.g., \"A50, A51, A52\")"
+    },
+    "diffusion_steps": {
+      "type": "number",
+      "required": false,
+      "default": 15,
+      "min": 1,
+      "max": 100,
+      "label": "Diffusion Steps",
+      "helpText": "Number of diffusion steps (1-100, higher = better quality but slower)"
+    },
+    "pdb_id": {
+      "type": "string",
+      "required": false,
+      "default": "",
+      "placeholder": "e.g., 1R42",
+      "label": "PDB ID",
+      "helpText": "Optional PDB ID to use as template (4-character code)"
     },
     "num_designs": {
       "type": "number",
@@ -159,7 +196,11 @@
       "__body_json__": "{{config.body_json}}",
       "__legacy_payload__": {
         "pdb_file": "{{input.target}}",
+        "pdb_id": "{{config.pdb_id}}",
         "contigs": "{{config.contigs}}",
+        "hotspot_res": "{{config.hotspot_res}}",
+        "diffusion_steps": "{{config.diffusion_steps}}",
+        "design_mode": "{{config.design_mode}}",
         "num_designs": "{{config.num_designs}}"
       }
     }
@@ -175,8 +216,12 @@
     "send_body": true,
     "body_content_type": "json",
     "body_specify": "json",
-    "body_json": "{\"pdb_file\": \"{{input.target}}\", \"contigs\": \"{{config.contigs}}\", \"num_designs\": \"{{config.num_designs}}\"}",
-    "contigs": "50",
+    "body_json": "{\"pdb_file\": \"{{input.target}}\", \"pdb_id\": \"{{config.pdb_id}}\", \"contigs\": \"{{config.contigs}}\", \"hotspot_res\": \"{{config.hotspot_res}}\", \"diffusion_steps\": {{config.diffusion_steps}}, \"design_mode\": \"{{config.design_mode}}\", \"num_designs\": {{config.num_designs}}}",
+    "design_mode": "unconditional",
+    "contigs": "A50-150",
+    "hotspot_res": "",
+    "diffusion_steps": 15,
+    "pdb_id": "",
     "num_designs": 1
   }
 }

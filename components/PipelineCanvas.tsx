@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import ReactFlow, {
   Node,
   Edge,
@@ -18,6 +18,8 @@ import { usePipelineStore } from '../store/pipelineStore';
 import { PipelineNode, NodeStatus } from '../types/index';
 import { PipelineNodeConfig } from './PipelineNodeConfig';
 import { PipelineNodePalette } from './PipelineNodePalette';
+import { SavedPipelinesList } from './SavedPipelinesList';
+import { SavePipelineDialog } from './SavePipelineDialog';
 import { ExecutionLogsPanel } from './ExecutionLogsPanel';
 import { CustomHandle } from './CustomHandle';
 import { 
@@ -35,7 +37,8 @@ import {
   Dna,
   Atom,
   MessageSquare,
-  Globe
+  Globe,
+  GripVertical
 } from 'lucide-react';
 
 // Get status class for node border glow
@@ -54,10 +57,80 @@ const getStatusClasses = (status: NodeStatus, isExecuting: boolean) => {
   }
 };
 
+// Editable label component for node labels
+const EditableLabel: React.FC<{ 
+  label: string; 
+  nodeId: string; 
+  onUpdate: (nodeId: string, label: string) => void;
+}> = ({ label, nodeId, onUpdate }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(label);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
+    setEditValue(label);
+  }, [label]);
+
+  const handleDoubleClick = () => {
+    setIsEditing(true);
+  };
+
+  const handleBlur = () => {
+    if (editValue.trim() !== label) {
+      onUpdate(nodeId, editValue.trim() || label);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleBlur();
+    } else if (e.key === 'Escape') {
+      setEditValue(label);
+      setIsEditing(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        className="w-full text-center text-xs font-medium text-white bg-gray-700/80 border border-gray-500 rounded px-2 py-1 outline-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+      />
+    );
+  }
+
+  return (
+    <div
+      onDoubleClick={handleDoubleClick}
+      className="text-center text-xs font-medium text-gray-200 cursor-text hover:text-white transition-colors px-1 py-0.5 rounded hover:bg-gray-800/50"
+      title="Double-click to edit"
+    >
+      {label || 'Unnamed'}
+    </div>
+  );
+};
+
 // Custom node components with enhanced animations
 const InputNode: React.FC<{ data: any }> = ({ data }) => {
   const status = data.status as NodeStatus;
   const isExecuting = data.isExecuting;
+  const lastClickTimeRef = useRef<number>(0);
   
   const getStatusIcon = () => {
     switch (status) {
@@ -77,37 +150,65 @@ const InputNode: React.FC<{ data: any }> = ({ data }) => {
     }
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    const now = Date.now();
+    const timeSinceLastClick = now - lastClickTimeRef.current;
+    lastClickTimeRef.current = now;
+    
+    // If this click is part of a double-click (within 300ms), don't stop propagation
+    // This allows React Flow's onNodeDoubleClick to fire
+    if (timeSinceLastClick > 300) {
+      e.stopPropagation();
+    }
+  };
+
   return (
-    <div className={`
-      px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
-      ${getStatusClasses(status, isExecuting)}
-    `}>
-      <CustomHandle type="source" position={Position.Right} />
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-            status === 'running' ? 'bg-blue-100' : 
-            status === 'success' ? 'bg-green-100' : 
-            status === 'error' ? 'bg-red-100' : 'bg-blue-100'
-          }`}>
-            <FileInput className={`w-4 h-4 ${
-              status === 'running' ? 'text-blue-600' : 
-              status === 'success' ? 'text-green-600' : 
-              status === 'error' ? 'text-red-600' : 'text-blue-600'
-            }`} />
+    <div className="flex flex-col items-center">
+      <div 
+        className={`
+          px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
+          ${getStatusClasses(status, isExecuting)}
+        `}
+        onClick={handleClick}
+        onDoubleClick={(e) => {
+          // Allow double-click to bubble up to React Flow's onNodeDoubleClick
+          // Don't stop propagation so the panel opens
+        }}
+      >
+        <CustomHandle type="source" position={Position.Right} />
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              status === 'running' ? 'bg-blue-100' : 
+              status === 'success' ? 'bg-green-100' : 
+              status === 'error' ? 'bg-red-100' : 'bg-blue-100'
+            }`}>
+              <FileInput className={`w-4 h-4 ${
+                status === 'running' ? 'text-blue-600' : 
+                status === 'success' ? 'text-green-600' : 
+                status === 'error' ? 'text-red-600' : 'text-blue-600'
+              }`} />
+            </div>
+            <span className="font-semibold text-sm text-gray-900">Input</span>
           </div>
-          <span className="font-semibold text-sm text-gray-900">Input</span>
+          {getStatusIcon()}
         </div>
-        {getStatusIcon()}
-      </div>
-      <div className="text-xs text-gray-500 pl-10">
-        {data.config?.filename || 'No file selected'}
-      </div>
-      {status === 'success' && (
-        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-          <CheckCircle2 className="w-3 h-3 text-white" />
+        <div className="text-xs text-gray-500 pl-10">
+          {data.config?.filename || 'No file selected'}
         </div>
-      )}
+        {status === 'success' && (
+          <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+            <CheckCircle2 className="w-3 h-3 text-white" />
+          </div>
+        )}
+      </div>
+      <div className="mt-1 w-full" onClick={(e) => e.stopPropagation()}>
+        <EditableLabel 
+          label={data.label || 'Input'} 
+          nodeId={data.id} 
+          onUpdate={data.onUpdateLabel || (() => {})} 
+        />
+      </div>
     </div>
   );
 };
@@ -135,43 +236,55 @@ const RFdiffusionNode: React.FC<{ data: any }> = ({ data }) => {
   };
 
   return (
-    <div className={`
-      px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
-      ${getStatusClasses(status, isExecuting)}
-    `}>
-      <CustomHandle type="target" position={Position.Left} />
-      <CustomHandle type="source" position={Position.Right} />
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-            status === 'running' ? 'bg-blue-100' : 
-            status === 'success' ? 'bg-green-100' : 
-            status === 'error' ? 'bg-red-100' : 'bg-purple-100'
-          }`}>
-            <Sparkles className={`w-4 h-4 ${
-              status === 'running' ? 'text-blue-600' : 
-              status === 'success' ? 'text-green-600' : 
-              status === 'error' ? 'text-red-600' : 'text-purple-600'
-            }`} />
+    <div className="flex flex-col items-center">
+      <div 
+        className={`
+          px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
+          ${getStatusClasses(status, isExecuting)}
+        `}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CustomHandle type="target" position={Position.Left} />
+        <CustomHandle type="source" position={Position.Right} />
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              status === 'running' ? 'bg-blue-100' : 
+              status === 'success' ? 'bg-green-100' : 
+              status === 'error' ? 'bg-red-100' : 'bg-purple-100'
+            }`}>
+              <Sparkles className={`w-4 h-4 ${
+                status === 'running' ? 'text-blue-600' : 
+                status === 'success' ? 'text-green-600' : 
+                status === 'error' ? 'text-red-600' : 'text-purple-600'
+              }`} />
+            </div>
+            <span className="font-semibold text-sm text-gray-900">RFdiffusion</span>
           </div>
-          <span className="font-semibold text-sm text-gray-900">RFdiffusion</span>
+          {getStatusIcon()}
         </div>
-        {getStatusIcon()}
-      </div>
-      <div className="text-xs text-gray-500 space-y-1 pl-10">
-        <div>Contigs: {data.config?.contigs || 'N/A'}</div>
-        {data.error && (
-          <div className="text-red-600 flex items-center gap-1">
-            <AlertCircle className="w-3 h-3" />
-            {data.error}
+        <div className="text-xs text-gray-500 space-y-1 pl-10">
+          <div>Contigs: {data.config?.contigs || 'N/A'}</div>
+          {data.error && (
+            <div className="text-red-600 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />
+              {data.error}
+            </div>
+          )}
+        </div>
+        {status === 'success' && (
+          <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+            <CheckCircle2 className="w-3 h-3 text-white" />
           </div>
         )}
       </div>
-      {status === 'success' && (
-        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-          <CheckCircle2 className="w-3 h-3 text-white" />
-        </div>
-      )}
+      <div className="mt-1 w-full" onClick={(e) => e.stopPropagation()}>
+        <EditableLabel 
+          label={data.label || 'RFdiffusion'} 
+          nodeId={data.id} 
+          onUpdate={data.onUpdateLabel || (() => {})} 
+        />
+      </div>
     </div>
   );
 };
@@ -199,43 +312,55 @@ const ProteinMPNNNode: React.FC<{ data: any }> = ({ data }) => {
   };
 
   return (
-    <div className={`
-      px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
-      ${getStatusClasses(status, isExecuting)}
-    `}>
-      <CustomHandle type="target" position={Position.Left} />
-      <CustomHandle type="source" position={Position.Right} />
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-            status === 'running' ? 'bg-blue-100' : 
-            status === 'success' ? 'bg-green-100' : 
-            status === 'error' ? 'bg-red-100' : 'bg-green-100'
-          }`}>
-            <Dna className={`w-4 h-4 ${
-              status === 'running' ? 'text-blue-600' : 
-              status === 'success' ? 'text-green-600' : 
-              status === 'error' ? 'text-red-600' : 'text-green-600'
-            }`} />
+    <div className="flex flex-col items-center">
+      <div 
+        className={`
+          px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
+          ${getStatusClasses(status, isExecuting)}
+        `}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CustomHandle type="target" position={Position.Left} />
+        <CustomHandle type="source" position={Position.Right} />
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              status === 'running' ? 'bg-blue-100' : 
+              status === 'success' ? 'bg-green-100' : 
+              status === 'error' ? 'bg-red-100' : 'bg-green-100'
+            }`}>
+              <Dna className={`w-4 h-4 ${
+                status === 'running' ? 'text-blue-600' : 
+                status === 'success' ? 'text-green-600' : 
+                status === 'error' ? 'text-red-600' : 'text-green-600'
+              }`} />
+            </div>
+            <span className="font-semibold text-sm text-gray-900">ProteinMPNN</span>
           </div>
-          <span className="font-semibold text-sm text-gray-900">ProteinMPNN</span>
+          {getStatusIcon()}
         </div>
-        {getStatusIcon()}
-      </div>
-      <div className="text-xs text-gray-500 space-y-1 pl-10">
-        <div>Sequences: {data.config?.num_sequences || 'N/A'}</div>
-        {data.error && (
-          <div className="text-red-600 flex items-center gap-1">
-            <AlertCircle className="w-3 h-3" />
-            {data.error}
+        <div className="text-xs text-gray-500 space-y-1 pl-10">
+          <div>Sequences: {data.config?.num_sequences || 'N/A'}</div>
+          {data.error && (
+            <div className="text-red-600 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />
+              {data.error}
+            </div>
+          )}
+        </div>
+        {status === 'success' && (
+          <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+            <CheckCircle2 className="w-3 h-3 text-white" />
           </div>
         )}
       </div>
-      {status === 'success' && (
-        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-          <CheckCircle2 className="w-3 h-3 text-white" />
-        </div>
-      )}
+      <div className="mt-1 w-full" onClick={(e) => e.stopPropagation()}>
+        <EditableLabel 
+          label={data.label || 'ProteinMPNN'} 
+          nodeId={data.id} 
+          onUpdate={data.onUpdateLabel || (() => {})} 
+        />
+      </div>
     </div>
   );
 };
@@ -263,43 +388,55 @@ const AlphaFoldNode: React.FC<{ data: any }> = ({ data }) => {
   };
 
   return (
-    <div className={`
-      px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
-      ${getStatusClasses(status, isExecuting)}
-    `}>
-      <CustomHandle type="target" position={Position.Left} />
-      <CustomHandle type="source" position={Position.Right} />
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-            status === 'running' ? 'bg-blue-100' : 
-            status === 'success' ? 'bg-green-100' : 
-            status === 'error' ? 'bg-red-100' : 'bg-orange-100'
-          }`}>
-            <Atom className={`w-4 h-4 ${
-              status === 'running' ? 'text-blue-600' : 
-              status === 'success' ? 'text-green-600' : 
-              status === 'error' ? 'text-red-600' : 'text-orange-600'
-            }`} />
+    <div className="flex flex-col items-center">
+      <div 
+        className={`
+          px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
+          ${getStatusClasses(status, isExecuting)}
+        `}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CustomHandle type="target" position={Position.Left} />
+        <CustomHandle type="source" position={Position.Right} />
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              status === 'running' ? 'bg-blue-100' : 
+              status === 'success' ? 'bg-green-100' : 
+              status === 'error' ? 'bg-red-100' : 'bg-orange-100'
+            }`}>
+              <Atom className={`w-4 h-4 ${
+                status === 'running' ? 'text-blue-600' : 
+                status === 'success' ? 'text-green-600' : 
+                status === 'error' ? 'text-red-600' : 'text-orange-600'
+              }`} />
+            </div>
+            <span className="font-semibold text-sm text-gray-900">AlphaFold</span>
           </div>
-          <span className="font-semibold text-sm text-gray-900">AlphaFold</span>
+          {getStatusIcon()}
         </div>
-        {getStatusIcon()}
-      </div>
-      <div className="text-xs text-gray-500 space-y-1 pl-10">
-        <div>Recycles: {data.config?.recycle_count || 'N/A'}</div>
-        {data.error && (
-          <div className="text-red-600 flex items-center gap-1">
-            <AlertCircle className="w-3 h-3" />
-            {data.error}
+        <div className="text-xs text-gray-500 space-y-1 pl-10">
+          <div>Recycles: {data.config?.recycle_count || 'N/A'}</div>
+          {data.error && (
+            <div className="text-red-600 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />
+              {data.error}
+            </div>
+          )}
+        </div>
+        {status === 'success' && (
+          <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+            <CheckCircle2 className="w-3 h-3 text-white" />
           </div>
         )}
       </div>
-      {status === 'success' && (
-        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-          <CheckCircle2 className="w-3 h-3 text-white" />
-        </div>
-      )}
+      <div className="mt-1 w-full" onClick={(e) => e.stopPropagation()}>
+        <EditableLabel 
+          label={data.label || 'AlphaFold'} 
+          nodeId={data.id} 
+          onUpdate={data.onUpdateLabel || (() => {})} 
+        />
+      </div>
     </div>
   );
 };
@@ -333,36 +470,48 @@ const MessageInputNode: React.FC<{ data: any }> = ({ data }) => {
     : 'No code';
 
   return (
-    <div className={`
-      px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
-      ${getStatusClasses(status, isExecuting)}
-    `}>
-      <CustomHandle type="source" position={Position.Right} />
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-            status === 'running' ? 'bg-blue-100' : 
-            status === 'success' ? 'bg-green-100' : 
-            status === 'error' ? 'bg-red-100' : 'bg-green-100'
-          }`}>
-            <MessageSquare className={`w-4 h-4 ${
-              status === 'running' ? 'text-blue-600' : 
-              status === 'success' ? 'text-green-600' : 
-              status === 'error' ? 'text-red-600' : 'text-green-600'
-            }`} />
+    <div className="flex flex-col items-center">
+      <div 
+        className={`
+          px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
+          ${getStatusClasses(status, isExecuting)}
+        `}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CustomHandle type="source" position={Position.Right} />
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              status === 'running' ? 'bg-blue-100' : 
+              status === 'success' ? 'bg-green-100' : 
+              status === 'error' ? 'bg-red-100' : 'bg-green-100'
+            }`}>
+              <MessageSquare className={`w-4 h-4 ${
+                status === 'running' ? 'text-blue-600' : 
+                status === 'success' ? 'text-green-600' : 
+                status === 'error' ? 'text-red-600' : 'text-green-600'
+              }`} />
+            </div>
+            <span className="font-semibold text-sm text-gray-900">Code Execution</span>
           </div>
-          <span className="font-semibold text-sm text-gray-900">Code Execution</span>
+          {getStatusIcon()}
         </div>
-        {getStatusIcon()}
-      </div>
-      <div className="text-xs text-gray-500 pl-10 font-mono">
-        {codePreview}
-      </div>
-      {status === 'success' && (
-        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-          <CheckCircle2 className="w-3 h-3 text-white" />
+        <div className="text-xs text-gray-500 pl-10 font-mono">
+          {codePreview}
         </div>
-      )}
+        {status === 'success' && (
+          <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+            <CheckCircle2 className="w-3 h-3 text-white" />
+          </div>
+        )}
+      </div>
+      <div className="mt-1 w-full" onClick={(e) => e.stopPropagation()}>
+        <EditableLabel 
+          label={data.label || 'Code Execution'} 
+          nodeId={data.id} 
+          onUpdate={data.onUpdateLabel || (() => {})} 
+        />
+      </div>
     </div>
   );
 };
@@ -396,47 +545,59 @@ const HttpRequestNode: React.FC<{ data: any }> = ({ data }) => {
     : 'No URL';
 
   return (
-    <div className={`
-      px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
-      ${getStatusClasses(status, isExecuting)}
-    `}>
-      <CustomHandle type="target" position={Position.Left} />
-      <CustomHandle type="source" position={Position.Right} />
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-            status === 'running' ? 'bg-blue-100' : 
-            status === 'success' ? 'bg-green-100' : 
-            status === 'error' ? 'bg-red-100' : 'bg-blue-100'
-          }`}>
-            <Globe className={`w-4 h-4 ${
-              status === 'running' ? 'text-blue-600' : 
-              status === 'success' ? 'text-green-600' : 
-              status === 'error' ? 'text-red-600' : 'text-blue-600'
-            }`} />
+    <div className="flex flex-col items-center">
+      <div 
+        className={`
+          px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
+          ${getStatusClasses(status, isExecuting)}
+        `}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CustomHandle type="target" position={Position.Left} />
+        <CustomHandle type="source" position={Position.Right} />
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+              status === 'running' ? 'bg-blue-100' : 
+              status === 'success' ? 'bg-green-100' : 
+              status === 'error' ? 'bg-red-100' : 'bg-blue-100'
+            }`}>
+              <Globe className={`w-4 h-4 ${
+                status === 'running' ? 'text-blue-600' : 
+                status === 'success' ? 'text-green-600' : 
+                status === 'error' ? 'text-red-600' : 'text-blue-600'
+              }`} />
+            </div>
+            <span className="font-semibold text-sm text-gray-900">HTTP Request</span>
           </div>
-          <span className="font-semibold text-sm text-gray-900">HTTP Request</span>
+          {getStatusIcon()}
         </div>
-        {getStatusIcon()}
-      </div>
-      <div className="text-xs text-gray-500 space-y-1 pl-10">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{data.config?.method || 'GET'}</span>
-          <span className="text-gray-400">•</span>
-          <span className="truncate">{urlPreview}</span>
+        <div className="text-xs text-gray-500 space-y-1 pl-10">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">{data.config?.method || 'GET'}</span>
+            <span className="text-gray-400">•</span>
+            <span className="truncate">{urlPreview}</span>
+          </div>
+          {data.error && (
+            <div className="text-red-600 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />
+              {data.error}
+            </div>
+          )}
         </div>
-        {data.error && (
-          <div className="text-red-600 flex items-center gap-1">
-            <AlertCircle className="w-3 h-3" />
-            {data.error}
+        {status === 'success' && (
+          <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+            <CheckCircle2 className="w-3 h-3 text-white" />
           </div>
         )}
       </div>
-      {status === 'success' && (
-        <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-          <CheckCircle2 className="w-3 h-3 text-white" />
-        </div>
-      )}
+      <div className="mt-1 w-full" onClick={(e) => e.stopPropagation()}>
+        <EditableLabel 
+          label={data.label || 'HTTP Request'} 
+          nodeId={data.id} 
+          onUpdate={data.onUpdateLabel || (() => {})} 
+        />
+      </div>
     </div>
   );
 };
@@ -465,10 +626,182 @@ export const PipelineCanvas: React.FC = () => {
     startExecution,
     stopExecution,
     clearPipeline,
+    lastSavedAt,
+    isSaving,
+    setCurrentPipeline,
   } = usePipelineStore();
 
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [showPalette, setShowPalette] = React.useState(false);
+  const [showSaveDialog, setShowSaveDialog] = React.useState(false);
+  
+  // Draggable panel state
+  const [panelPosition, setPanelPosition] = React.useState({ right: 16, top: 80 }); // Default: right-4 (16px), top-20 (80px)
+  const [panelSize, setPanelSize] = React.useState({ width: 900, height: 600 }); // Default panel size
+  const [isDragging, setIsDragging] = React.useState(false);
+  const [isResizing, setIsResizing] = React.useState(false);
+  const [resizeType, setResizeType] = React.useState<'width-right' | 'width-left' | 'height-bottom' | 'height-top' | 'both-bottom-right' | 'both-bottom-left' | 'both-top-right' | 'both-top-left' | null>(null);
+  const [dragStart, setDragStart] = React.useState({ x: 0, y: 0 });
+  const [resizeStart, setResizeStart] = React.useState({ x: 0, y: 0, width: 0, height: 0, right: 0, top: 0 });
+  const panelRef = React.useRef<HTMLDivElement>(null);
+
+  // Drag handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Don't start dragging if clicking on interactive elements or resize handles
+    const target = e.target as HTMLElement;
+    if (
+      target.tagName === 'BUTTON' ||
+      target.tagName === 'INPUT' ||
+      target.tagName === 'SELECT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('select') ||
+      target.closest('textarea') ||
+      target.closest('[role="button"]') ||
+      target.closest('[class*="cursor-col-resize"]') ||
+      target.closest('[class*="cursor-row-resize"]') ||
+      target.closest('[class*="cursor-nwse-resize"]') ||
+      target.closest('[class*="cursor-nesw-resize"]')
+    ) {
+      return;
+    }
+    
+    if (panelRef.current) {
+      setIsDragging(true);
+      const rect = panelRef.current.getBoundingClientRect();
+      setDragStart({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
+      e.preventDefault(); // Prevent text selection
+    }
+  }, []);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (isResizing && panelRef.current) {
+      const parentRect = panelRef.current.parentElement?.getBoundingClientRect();
+      if (parentRect) {
+        const deltaX = e.clientX - resizeStart.x;
+        const deltaY = e.clientY - resizeStart.y;
+        
+        let newWidth = resizeStart.width;
+        let newHeight = resizeStart.height;
+        let newRight = resizeStart.right;
+        let newTop = resizeStart.top;
+        
+        // Handle width resizing - natural behavior: fix the opposite edge
+        if (resizeType?.includes('width-right') || resizeType?.includes('both-bottom-right') || resizeType?.includes('both-top-right')) {
+          // Resizing from right edge - left edge stays fixed
+          // deltaX: positive = dragging right (increases width), negative = dragging left (decreases width)
+          newWidth = Math.max(400, Math.min(1200, resizeStart.width + deltaX));
+        } else if (resizeType?.includes('width-left') || resizeType?.includes('both-bottom-left') || resizeType?.includes('both-top-left')) {
+          // Resizing from left edge - right edge stays fixed
+          // deltaX: positive = dragging right (should decrease width), negative = dragging left (should increase width)
+          // So we invert: newWidth = oldWidth - deltaX
+          // But if user says it's opposite, maybe the coordinate system is different
+          // Let's try: dragging left edge left (negative deltaX) = increase width, dragging right (positive deltaX) = decrease width
+          newWidth = Math.max(400, Math.min(1200, resizeStart.width - deltaX));
+          // Adjust right position to keep right edge fixed
+          // When width changes, right position must change by the same amount in opposite direction
+          newRight = resizeStart.right + (resizeStart.width - newWidth);
+          // Constrain to parent bounds
+          newRight = Math.max(0, Math.min(parentRect.width - newWidth, newRight));
+        }
+        
+        // Handle height resizing - natural behavior: fix the opposite edge
+        if (resizeType?.includes('height-bottom') || resizeType?.includes('both-bottom-right') || resizeType?.includes('both-bottom-left')) {
+          // Resizing from bottom edge - top edge stays fixed
+          // deltaY: positive = dragging down (increases height), negative = dragging up (decreases height)
+          newHeight = Math.max(300, Math.min(parentRect.height - resizeStart.top, resizeStart.height + deltaY));
+        } else if (resizeType?.includes('height-top') || resizeType?.includes('both-top-right') || resizeType?.includes('both-top-left')) {
+          // Resizing from top edge - bottom edge stays fixed
+          // deltaY: positive = dragging down (decreases height), negative = dragging up (increases height)
+          // The bottom edge position: top + height
+          // To keep bottom fixed: newTop = oldTop + (oldHeight - newHeight)
+          newHeight = Math.max(300, Math.min(parentRect.height - resizeStart.top, resizeStart.height - deltaY));
+          // Adjust top to keep bottom edge fixed
+          newTop = resizeStart.top + (resizeStart.height - newHeight);
+          // Constrain to parent bounds
+          newTop = Math.max(0, Math.min(parentRect.height - newHeight, newTop));
+        }
+        
+        setPanelSize({ width: newWidth, height: newHeight });
+        setPanelPosition({ right: newRight, top: newTop });
+      }
+    } else if (isDragging && panelRef.current) {
+      const parentRect = panelRef.current.parentElement?.getBoundingClientRect();
+      if (parentRect) {
+        // Calculate new position relative to parent
+        const newLeft = e.clientX - parentRect.left - dragStart.x;
+        const newTop = e.clientY - parentRect.top - dragStart.y;
+        
+        // Convert left to right (for absolute positioning with right property)
+        const newRight = parentRect.width - newLeft - panelSize.width;
+        
+        // Constrain to parent bounds
+        const minRight = 0;
+        const maxRight = parentRect.width - panelSize.width;
+        const minTop = 0;
+        const maxTop = parentRect.height - 100; // minimum panel height
+        
+        setPanelPosition({
+          right: Math.max(minRight, Math.min(newRight, maxRight)),
+          top: Math.max(minTop, Math.min(newTop, maxTop)),
+        });
+      }
+    }
+  }, [isDragging, isResizing, dragStart, resizeStart, resizeType, panelSize.width]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    setIsResizing(false);
+    setResizeType(null);
+  }, []);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent, type: 'width-right' | 'width-left' | 'height-bottom' | 'height-top' | 'both-bottom-right' | 'both-bottom-left' | 'both-top-right' | 'both-top-left') => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (panelRef.current) {
+      setIsResizing(true);
+      setResizeType(type);
+      const rect = panelRef.current.getBoundingClientRect();
+      const parentRect = panelRef.current.parentElement?.getBoundingClientRect();
+      if (parentRect) {
+        // For left edge, capture the left edge position, not mouse position
+        // For right edge, capture the right edge position
+        let startX = e.clientX;
+        if (type.includes('width-left') || type.includes('both-bottom-left') || type.includes('both-top-left')) {
+          // Use the left edge of the panel as reference
+          startX = rect.left;
+        } else if (type.includes('width-right') || type.includes('both-bottom-right') || type.includes('both-top-right')) {
+          // Use the right edge of the panel as reference
+          startX = rect.right;
+        }
+        
+        setResizeStart({
+          x: startX,
+          y: e.clientY,
+          width: panelSize.width,
+          height: panelSize.height,
+          right: panelPosition.right,
+          top: panelPosition.top,
+        });
+      }
+    }
+  }, [panelSize, panelPosition]);
+
+  // Attach global mouse event listeners for dragging and resizing
+  React.useEffect(() => {
+    if (isDragging || isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
 
   // Convert pipeline nodes to React Flow nodes
   const reactFlowNodes = useMemo(() => {
@@ -503,6 +836,9 @@ export const PipelineCanvas: React.FC = () => {
         status: node.status,
         error: node.error,
         isExecuting,
+        onUpdateLabel: (nodeId: string, newLabel: string) => {
+          updateNode(nodeId, { label: newLabel });
+        },
       },
       style: {
         opacity: ghostBlueprint && !currentPipeline ? 0.5 : 1,
@@ -570,6 +906,54 @@ export const PipelineCanvas: React.FC = () => {
     }
   }, [reactFlowEdges, setEdges]);
 
+  // Auto-save when node positions change (debounced to avoid excessive saves during dragging)
+  const positionUpdateTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  React.useEffect(() => {
+    if (nodes.length > 0 && currentPipeline) {
+      // Clear previous timer
+      if (positionUpdateTimerRef.current) {
+        clearTimeout(positionUpdateTimerRef.current);
+      }
+      
+      // Debounce position updates (only save after user stops dragging)
+      positionUpdateTimerRef.current = setTimeout(() => {
+        const updatedNodes = currentPipeline.nodes.map((pipelineNode) => {
+          const reactFlowNode = nodes.find((n) => n.id === pipelineNode.id);
+          if (reactFlowNode && reactFlowNode.position) {
+            return {
+              ...pipelineNode,
+              position: reactFlowNode.position,
+            };
+          }
+          return pipelineNode;
+        });
+        
+        // Only update if positions actually changed
+        const positionsChanged = updatedNodes.some((node) => {
+          const original = currentPipeline.nodes.find(n => n.id === node.id);
+          return original && (
+            original.position?.x !== node.position?.x ||
+            original.position?.y !== node.position?.y
+          );
+        });
+        
+        if (positionsChanged) {
+          setCurrentPipeline({
+            ...currentPipeline,
+            nodes: updatedNodes,
+            updatedAt: new Date(),
+          });
+        }
+      }, 500); // Wait 500ms after last position change
+    }
+    
+    return () => {
+      if (positionUpdateTimerRef.current) {
+        clearTimeout(positionUpdateTimerRef.current);
+      }
+    };
+  }, [nodes, currentPipeline, setCurrentPipeline]);
+
   const onConnect = useCallback(
     (params: Connection | null) => {
       if (!params || !params.source || !params.target) {
@@ -590,6 +974,10 @@ export const PipelineCanvas: React.FC = () => {
     setSelectedNodeId(node.id);
   }, []);
 
+  const onNodeDoubleClick = useCallback((_event: React.MouseEvent, node: Node) => {
+    setSelectedNodeId(node.id);
+  }, []);
+
   const handleNodeDelete = useCallback(
     (nodeId: string) => {
       deleteNode(nodeId);
@@ -599,14 +987,29 @@ export const PipelineCanvas: React.FC = () => {
   );
 
   const handleSavePipeline = () => {
-    const name = prompt('Enter pipeline name:');
-    if (name) {
-      usePipelineStore.getState().savePipeline(name);
-    }
+    setShowSaveDialog(true);
   };
 
   const hasGhostNodes = !!ghostBlueprint && !currentPipeline;
   const hasNodes = (currentPipeline?.nodes.length || 0) > 0;
+
+  // Format last saved time
+  const formatLastSaved = (date: Date | string | null) => {
+    if (!date) return '';
+    // Convert string to Date if needed (from localStorage)
+    const dateObj = date instanceof Date ? date : new Date(date);
+    if (isNaN(dateObj.getTime())) return '';
+    
+    const now = new Date();
+    const diff = now.getTime() - dateObj.getTime();
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    
+    if (seconds < 10) return 'Just now';
+    if (seconds < 60) return `${seconds}s ago`;
+    if (minutes < 60) return `${minutes}m ago`;
+    return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <div className="h-full flex flex-col bg-[#1a1a2e]">
@@ -617,6 +1020,25 @@ export const PipelineCanvas: React.FC = () => {
           <h2 className="text-sm font-semibold text-gray-200">
             {currentPipeline?.name || 'Pipeline Canvas'}
           </h2>
+          
+          {/* Auto-save indicator (like n8n) */}
+          {currentPipeline && (
+            <div className="flex items-center gap-2 text-xs text-gray-400">
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : lastSavedAt ? (
+                <>
+                  <CheckCircle2 className="w-3 h-3 text-green-500" />
+                  <span className="text-gray-300">Saved</span>
+                  <span className="text-gray-500">•</span>
+                  <span>{formatLastSaved(lastSavedAt)}</span>
+                </>
+              ) : null}
+            </div>
+          )}
           
           {/* n8n-style Editor/Executions toggle */}
           <div className="flex bg-gray-800/50 rounded-lg p-0.5">
@@ -731,11 +1153,12 @@ export const PipelineCanvas: React.FC = () => {
       {/* Main content area with Editor/Executions views */}
       <div className="flex-1 relative flex min-h-0">
         {viewMode === 'editor' ? (
-          // Editor View - Canvas with optional palette
+          // Editor View - Canvas with saved pipelines on left and palette on right
           <>
-            {showPalette && !hasGhostNodes && (
-              <PipelineNodePalette />
-            )}
+            {/* Left side - Saved Pipelines List */}
+            <SavedPipelinesList />
+            
+            {/* Center - Canvas */}
             <div className="flex-1 relative">
               {reactFlowNodes.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center bg-[#1a1a2e]">
@@ -757,6 +1180,7 @@ export const PipelineCanvas: React.FC = () => {
                   onEdgesChange={onEdgesChange}
                   onConnect={onConnect}
                   onNodeClick={onNodeClick}
+                  onNodeDoubleClick={onNodeDoubleClick}
                   nodeTypes={nodeTypes}
                   fitView
                   className="bg-[#1a1a2e]"
@@ -782,6 +1206,11 @@ export const PipelineCanvas: React.FC = () => {
                 </ReactFlow>
               )}
             </div>
+            
+            {/* Right side - Node Palette */}
+            {showPalette && !hasGhostNodes && (
+              <PipelineNodePalette />
+            )}
           </>
         ) : (
           // Executions View - Split canvas and logs
@@ -800,6 +1229,7 @@ export const PipelineCanvas: React.FC = () => {
                   onEdgesChange={onEdgesChange}
                   onConnect={onConnect}
                   onNodeClick={onNodeClick}
+                  onNodeDoubleClick={onNodeDoubleClick}
                   nodeTypes={nodeTypes}
                   fitView
                   className="bg-[#1a1a2e]"
@@ -852,14 +1282,99 @@ export const PipelineCanvas: React.FC = () => {
         )}
       </div>
 
+      {/* Save Pipeline Dialog */}
+      <SavePipelineDialog
+        isOpen={showSaveDialog}
+        onClose={() => setShowSaveDialog(false)}
+      />
+
       {/* Node Configuration Panel (only in editor view) */}
       {selectedNodeId && viewMode === 'editor' && (
-        <div className="absolute right-4 top-20 bottom-4 w-[900px] bg-[#1e1e32] border border-gray-700/50 rounded-xl shadow-2xl z-10 overflow-hidden flex flex-col">
-          <PipelineNodeConfig
-            nodeId={selectedNodeId}
-            onUpdate={(updates) => updateNode(selectedNodeId, updates)}
-            onDelete={() => handleNodeDelete(selectedNodeId)}
-            onClose={() => setSelectedNodeId(null)}
+        <div
+          ref={panelRef}
+          className="absolute bg-[#1e1e32] border border-gray-700/50 rounded-xl shadow-2xl z-10 flex flex-col"
+          style={{
+            right: `${panelPosition.right}px`,
+            top: `${panelPosition.top}px`,
+            width: `${panelSize.width}px`,
+            height: `${panelSize.height}px`,
+            maxHeight: 'calc(100vh - 100px)', // Constrain height
+            cursor: isDragging 
+              ? 'grabbing' 
+              : isResizing 
+                ? (resizeType?.includes('both-top-left') || resizeType?.includes('both-bottom-right') 
+                    ? 'nwse-resize' 
+                    : resizeType?.includes('both-top-right') || resizeType?.includes('both-bottom-left')
+                      ? 'nesw-resize'
+                      : resizeType?.includes('width')
+                        ? 'col-resize'
+                        : 'row-resize')
+                : 'grab',
+            userSelect: 'none',
+          }}
+          onMouseDown={handleMouseDown}
+        >
+          {/* Panel Content */}
+          <div className="flex-1 overflow-y-auto">
+            <PipelineNodeConfig
+              nodeId={selectedNodeId}
+              onUpdate={(updates) => updateNode(selectedNodeId, updates)}
+              onDelete={() => handleNodeDelete(selectedNodeId)}
+              onClose={() => setSelectedNodeId(null)}
+            />
+          </div>
+          
+          {/* Resize Handles */}
+          {/* Top edge resize handle */}
+          <div
+            className="absolute top-0 left-0 right-0 h-1 cursor-row-resize hover:bg-blue-500/50 transition-colors z-20"
+            onMouseDown={(e) => handleResizeStart(e, 'height-top')}
+            style={{ height: '4px' }}
+          />
+          
+          {/* Right edge resize handle */}
+          <div
+            className="absolute top-0 bottom-0 right-0 w-1 cursor-col-resize hover:bg-blue-500/50 transition-colors z-20"
+            onMouseDown={(e) => handleResizeStart(e, 'width-right')}
+            style={{ width: '4px' }}
+          />
+          
+          {/* Bottom edge resize handle */}
+          <div
+            className="absolute bottom-0 left-0 right-0 h-1 cursor-row-resize hover:bg-blue-500/50 transition-colors z-20"
+            onMouseDown={(e) => handleResizeStart(e, 'height-bottom')}
+            style={{ height: '4px' }}
+          />
+          
+          {/* Left edge resize handle */}
+          <div
+            className="absolute top-0 bottom-0 left-0 w-1 cursor-col-resize hover:bg-blue-500/50 transition-colors z-20"
+            onMouseDown={(e) => handleResizeStart(e, 'width-left')}
+            style={{ width: '4px' }}
+          />
+          
+          {/* Top-left corner resize handle */}
+          <div
+            className="absolute top-0 left-0 w-4 h-4 cursor-nwse-resize z-30"
+            onMouseDown={(e) => handleResizeStart(e, 'both-top-left')}
+          />
+          
+          {/* Top-right corner resize handle */}
+          <div
+            className="absolute top-0 right-0 w-4 h-4 cursor-nesw-resize z-30"
+            onMouseDown={(e) => handleResizeStart(e, 'both-top-right')}
+          />
+          
+          {/* Bottom-right corner resize handle */}
+          <div
+            className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-30"
+            onMouseDown={(e) => handleResizeStart(e, 'both-bottom-right')}
+          />
+          
+          {/* Bottom-left corner resize handle */}
+          <div
+            className="absolute bottom-0 left-0 w-4 h-4 cursor-nesw-resize z-30"
+            onMouseDown={(e) => handleResizeStart(e, 'both-bottom-left')}
           />
         </div>
       )}

@@ -15,6 +15,50 @@ export function resolveTemplate(
   // Match {{variable}} patterns
   const templateRegex = /\{\{([^}]+)\}\}/g;
   
+  // Check if template contains any variables
+  if (!templateRegex.test(template)) {
+    return template;
+  }
+  
+  // Reset regex (test() advances the lastIndex)
+  templateRegex.lastIndex = 0;
+  
+  // Check if the entire string is just a template variable (for preserving types)
+  const fullMatch = template.match(/^\{\{([^}]+)\}\}$/);
+  if (fullMatch) {
+    const trimmedPath = fullMatch[1].trim();
+    
+    // Handle {{input.handleId}} - get data from input connections
+    if (trimmedPath.startsWith('input.')) {
+      const handleId = trimmedPath.replace('input.', '');
+      const value = inputData[handleId];
+      if (value === undefined || value === null) {
+        throw new Error(`Input '${handleId}' not found for node ${node.id}`);
+      }
+      // Return value as-is to preserve type (object, number, etc.)
+      return value;
+    }
+    
+    // Handle {{config.fieldName}} - get from node config
+    if (trimmedPath.startsWith('config.')) {
+      const fieldName = trimmedPath.replace('config.', '');
+      const value = node.config?.[fieldName];
+      
+      if (value === undefined || value === null || value === '') {
+        return '';
+      }
+      // Return value as-is to preserve type (number, boolean, object, etc.)
+      return value;
+    }
+    
+    // Handle {{node.fieldName}} - get from node metadata
+    if (trimmedPath.startsWith('node.')) {
+      const fieldName = trimmedPath.replace('node.', '');
+      return (node as any)[fieldName] || '';
+    }
+  }
+  
+  // For strings with embedded templates, use replace
   return template.replace(templateRegex, (match, path) => {
     const trimmedPath = path.trim();
     
@@ -25,28 +69,26 @@ export function resolveTemplate(
       if (value === undefined || value === null) {
         throw new Error(`Input '${handleId}' not found for node ${node.id}`);
       }
-      return value;
+      // For embedded templates, convert to string
+      return typeof value === 'object' ? JSON.stringify(value) : String(value);
     }
     
     // Handle {{config.fieldName}} - get from node config
     if (trimmedPath.startsWith('config.')) {
       const fieldName = trimmedPath.replace('config.', '');
-      // Get value from node config
       const value = node.config?.[fieldName];
       
-      // For API keys and sensitive fields, return empty string if not set (allows fallback)
-      // For other fields, return empty string as well (API will handle defaults)
       if (value === undefined || value === null || value === '') {
         return '';
       }
-      
-      return value;
+      // For embedded templates, convert to string
+      return String(value);
     }
     
     // Handle {{node.fieldName}} - get from node metadata
     if (trimmedPath.startsWith('node.')) {
       const fieldName = trimmedPath.replace('node.', '');
-      return (node as any)[fieldName] || '';
+      return String((node as any)[fieldName] || '');
     }
     
     return match; // Return original if pattern not recognized
