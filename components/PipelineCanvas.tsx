@@ -422,7 +422,7 @@ export const PipelineCanvas: React.FC = () => {
     (params: Connection) => {
       if (params.source && params.target) {
         addPipelineEdge(params.source, params.target);
-        setEdges((eds) => addEdge(params, eds));
+        setEdges((eds: Edge[]) => addEdge(params, eds));
       }
     },
     [addPipelineEdge, setEdges]
@@ -612,7 +612,7 @@ export const PipelineCanvas: React.FC = () => {
                   <Controls className="bg-gray-800 border-gray-700 rounded-lg" />
                   <MiniMap 
                     className="bg-gray-800/50 rounded-lg"
-                    nodeColor={(node) => {
+                    nodeColor={(node: Node) => {
                       switch (node.data?.status) {
                         case 'running': return '#3b82f6';
                         case 'success': return '#22c55e';
