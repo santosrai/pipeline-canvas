@@ -262,14 +262,17 @@ class RFdiffusionHandler:
                     pdb_path = Path(metadata["absolute_path"])
                     if pdb_path.exists():
                         pdb_content = pdb_path.read_text()
-                        logger.info(f"Retrieved PDB from uploaded file: {upload_id}")
-                        return pdb_content
+                        if pdb_content and pdb_content.strip():
+                            logger.info(f"Retrieved PDB from uploaded file: {upload_id} ({len(pdb_content)} chars)")
+                            return pdb_content
+                        else:
+                            logger.warning(f"Uploaded PDB file is empty: {metadata.get('absolute_path')}")
                     else:
                         logger.warning(f"Uploaded PDB file not found: {metadata.get('absolute_path')}")
                 else:
                     logger.warning(f"Uploaded PDB metadata not found for ID: {upload_id}")
             except Exception as e:
-                logger.error(f"Error retrieving uploaded PDB {upload_id}: {e}")
+                logger.error(f"Error retrieving uploaded PDB {upload_id}: {e}", exc_info=True)
                 # Fall through to next priority
         
         # Priority 2: Check for PDB ID
@@ -334,8 +337,10 @@ class RFdiffusionHandler:
             self.active_jobs[job_id] = "running"
             
             # Resolve PDB content from multiple sources
+            logger.info(f"Resolving PDB content for job {job_id}, parameters keys: {list(parameters.keys())}")
             pdb_content = self._resolve_pdb_content(parameters)
             design_mode = parameters.get("design_mode", "unconditional")
+            logger.info(f"PDB resolution result: content_length={len(pdb_content) if pdb_content else 0}, design_mode={design_mode}")
             
             # Prepare parameters for RFdiffusion client
             # If PDB content was resolved, pass it as input_pdb
@@ -373,6 +378,20 @@ class RFdiffusionHandler:
             # Submit to RFdiffusion API
             try:
                 logger.info(f"Submitting RFdiffusion design job {job_id} with params: {list(client_params.keys())}, design_mode={design_mode}")
+                # Debug: Log client params being sent to NVIDIA API
+                print("=" * 80)
+                print(f"[RFdiffusion Handler] ===== CLIENT PARAMS TO NVIDIA API ======")
+                print(f"[RFdiffusion Handler] Job ID: {job_id}")
+                print(f"[RFdiffusion Handler] Design mode: {design_mode}")
+                print(f"[RFdiffusion Handler] Client params keys: {list(client_params.keys())}")
+                for key, value in client_params.items():
+                    if key == "input_pdb" and isinstance(value, str) and len(value) > 200:
+                        print(f"[RFdiffusion Handler]   {key}: {type(value).__name__} (length: {len(value)}, preview: {value[:100]}...)")
+                    elif isinstance(value, (dict, list)):
+                        print(f"[RFdiffusion Handler]   {key}: {type(value).__name__} = {value}")
+                    else:
+                        print(f"[RFdiffusion Handler]   {key}: {type(value).__name__} = {repr(value)}")
+                print("=" * 80)
                 result = await rfdiffusion_client.submit_design_request(
                     progress_callback=progress_callback,
                     **client_params

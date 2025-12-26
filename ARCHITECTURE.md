@@ -491,6 +491,15 @@ npm run dev:all          # Runs both frontend and backend
 
 ## Extension Points
 
+### Adding a New Pipeline Node
+1. Create node JSON config in `src/components/pipeline-canvas/nodes/{node_type}/node.json`
+   - Include `metadata`, `schema`, `handles`, `execution`, and `defaultConfig`
+2. Add node type to `NodeType` union in `src/components/pipeline-canvas/types/index.ts`
+3. Add node to palette in `src/components/pipeline-canvas/components/PipelineNodePalette.tsx`
+4. Add node component in `src/components/pipeline-canvas/components/PipelineCanvas.tsx`
+5. Implement execution logic in `src/components/pipeline-canvas/utils/executionEngine.ts`
+6. **⚠️ IMPORTANT:** See [Node Development Guide](./docs/node-development-guide.md) for critical best practices and common pitfalls
+
 ### Adding a New Agent
 1. Define agent in `server/agents.py` with:
    - System prompt

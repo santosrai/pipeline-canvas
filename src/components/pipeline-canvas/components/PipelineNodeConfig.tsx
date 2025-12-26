@@ -37,9 +37,8 @@ const getInputDataForNode = (
 
   // Get input data based on source node type
   if (sourceNode.type === 'input_node') {
-    return {
-      sourceNode,
-      inputData: {
+    // Prioritize result_metadata (from execution) over config
+    const fileInfo = sourceNode.result_metadata?.file_info || sourceNode.result_metadata?.data || {
         type: 'pdb_file',
         filename: sourceNode.config?.filename,
         file_id: sourceNode.config?.file_id,
@@ -47,7 +46,12 @@ const getInputDataForNode = (
         chains: sourceNode.config?.chains,
         total_residues: sourceNode.config?.total_residues,
         suggested_contigs: sourceNode.config?.suggested_contigs,
-      },
+      chain_residue_counts: sourceNode.config?.chain_residue_counts,
+      atoms: sourceNode.config?.atoms,
+    };
+    return {
+      sourceNode,
+      inputData: fileInfo,
     };
   }
 
@@ -88,8 +92,22 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
   onDelete,
   onClose,
 }) => {
-  const { currentPipeline, currentExecution, startExecution } = usePipelineStore();
+  const { currentPipeline, currentExecution, executeSingleNode } = usePipelineStore();
   const node = currentPipeline?.nodes.find((n) => n.id === nodeId);
+  
+  // Debug: Log when node config changes
+  useEffect(() => {
+    if (node?.type === 'input_node') {
+      console.log('[PipelineNodeConfig] Node config updated:', {
+        nodeId,
+        hasConfig: !!node.config,
+        configKeys: node.config ? Object.keys(node.config) : null,
+        filename: node.config?.filename,
+        file_id: node.config?.file_id,
+        fullConfig: JSON.parse(JSON.stringify(node.config || {})), // Deep clone to see current state
+      });
+    }
+  }, [nodeId, node?.config?.filename, node?.config?.file_id, node?.config]);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -101,6 +119,26 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
   const nodeLog: ExecutionLogEntry | undefined = currentExecution?.logs.find(
     (log) => log.nodeId === nodeId
   );
+
+  // Debug logging for input nodes - check if output tab should show data
+  useEffect(() => {
+    if (node?.type === 'input_node' && activeTab === 'output') {
+      console.log('[PipelineNodeConfig] Input node - Output tab opened:', {
+        nodeId,
+        hasNodeLog: !!nodeLog,
+        hasConfig: !!node.config,
+        hasFilename: !!node.config?.filename,
+        hasFileId: !!node.config?.file_id,
+        filename: node.config?.filename,
+        fileId: node.config?.file_id,
+        hasResultMetadata: !!node.result_metadata,
+        hasFileInfo: !!node.result_metadata?.file_info,
+        hasResultData: !!node.result_metadata?.data,
+        configKeys: node.config ? Object.keys(node.config) : null,
+        shouldShowOutput: !!(nodeLog || (node.config?.filename || node.config?.file_id || node.result_metadata?.file_info || node.result_metadata?.data)),
+      });
+    }
+  }, [nodeId, node?.type, activeTab, node?.config, node?.result_metadata, nodeLog]);
 
   // Debug: Log when nodeLog changes (especially for HTTP request nodes)
   useEffect(() => {
@@ -122,6 +160,30 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
     }
   }, [nodeId, node?.type, currentExecution, nodeLog, activeTab]);
 
+  // Debug: Log for input nodes when output tab is active
+  useEffect(() => {
+    if (node?.type === 'input_node') {
+      console.log('[PipelineNodeConfig] Input node state:', {
+        nodeId,
+        activeTab,
+        hasNodeLog: !!nodeLog,
+        hasCurrentExecution: !!currentExecution,
+        hasConfig: !!node.config,
+        configKeys: node.config ? Object.keys(node.config) : null,
+        hasFilename: !!node.config?.filename,
+        filename: node.config?.filename,
+        hasFileId: !!node.config?.file_id,
+        fileId: node.config?.file_id,
+        hasResultMetadata: !!node.result_metadata,
+        hasFileInfo: !!node.result_metadata?.file_info,
+        hasResultData: !!node.result_metadata?.data,
+        shouldShowOutput: !!(nodeLog || (node.config?.filename || node.config?.file_id || node.result_metadata?.file_info || node.result_metadata?.data)),
+        fullConfig: node.config,
+        fullResultMetadata: node.result_metadata,
+      });
+    }
+  }, [nodeId, node?.type, activeTab, node?.config, node?.result_metadata, nodeLog, currentExecution]);
+
   // Get input data for nodes that have inputs
   const { sourceNode, inputData } = currentPipeline
     ? getInputDataForNode(nodeId, currentPipeline.nodes, currentPipeline.edges, node?.type)
@@ -135,12 +197,43 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
   }
 
   const handleConfigChange = (key: string, value: any) => {
-    onUpdate({
-      config: {
-        ...node.config,
+    // Get the latest node from store to ensure we have the most up-to-date config
+    const latestNode = usePipelineStore.getState().currentPipeline?.nodes.find((n) => n.id === nodeId);
+    const currentConfig = latestNode?.config || node.config || {};
+    
+    const newConfig = {
+      ...currentConfig,
         [key]: value,
-      },
+    };
+    
+    if (node?.type === 'input_node') {
+      console.log('[PipelineNodeConfig] handleConfigChange for input node:', {
+        nodeId,
+        key,
+        value,
+        oldConfig: currentConfig,
+        newConfig,
+        usingLatestNode: latestNode !== node,
+      });
+    }
+    
+    onUpdate({
+      config: newConfig,
     });
+    
+    // After update, check the store to verify it was updated
+    setTimeout(() => {
+      if (node?.type === 'input_node') {
+        const updatedNode = usePipelineStore.getState().currentPipeline?.nodes.find((n) => n.id === nodeId);
+        console.log('[PipelineNodeConfig] After onUpdate - checking store:', {
+          nodeId,
+          hasUpdatedNode: !!updatedNode,
+          updatedConfig: updatedNode?.config,
+          updatedFilename: updatedNode?.config?.filename,
+          updatedFileId: updatedNode?.config?.file_id,
+        });
+      }
+    }, 100);
   };
 
   const handleFileSelected = async (file: File) => {
@@ -164,27 +257,57 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
 
       const result = await response.json();
       
-      // Update node config with uploaded file info
-      handleConfigChange('filename', result.file_info.filename);
-      handleConfigChange('file_id', result.file_info.file_id);
-      handleConfigChange('file_url', result.file_info.file_url);
+      console.log('[PipelineNodeConfig] File upload result:', {
+        nodeId,
+        result,
+        fileInfo: result.file_info,
+      });
       
-      // Store PDB analysis results for RFdiffusion suggestions
-      if (result.file_info.chain_residue_counts) {
-        handleConfigChange('chain_residue_counts', result.file_info.chain_residue_counts);
-      }
-      if (result.file_info.total_residues) {
-        handleConfigChange('total_residues', result.file_info.total_residues);
-      }
-      if (result.file_info.suggested_contigs) {
-        handleConfigChange('suggested_contigs', result.file_info.suggested_contigs);
-      }
-      if (result.file_info.chains) {
-        handleConfigChange('chains', result.file_info.chains);
-      }
-      if (result.file_info.atoms) {
-        handleConfigChange('atoms', result.file_info.atoms);
-      }
+      // Get the latest node from store to ensure we have the most up-to-date config
+      const latestNode = usePipelineStore.getState().currentPipeline?.nodes.find((n) => n.id === nodeId);
+      const currentConfig = latestNode?.config || node.config || {};
+      
+      // Update all config values at once to avoid race conditions
+      const updatedConfig = {
+        ...currentConfig,
+        filename: result.file_info.filename,
+        file_id: result.file_info.file_id,
+        file_url: result.file_info.file_url,
+        ...(result.file_info.chain_residue_counts && { chain_residue_counts: result.file_info.chain_residue_counts }),
+        ...(result.file_info.total_residues && { total_residues: result.file_info.total_residues }),
+        ...(result.file_info.suggested_contigs && { suggested_contigs: result.file_info.suggested_contigs }),
+        ...(result.file_info.chains && { chains: result.file_info.chains }),
+        ...(result.file_info.atoms && { atoms: result.file_info.atoms }),
+      };
+      
+      console.log('[PipelineNodeConfig] Updating config with all values at once:', {
+        nodeId,
+        currentConfig,
+        updatedConfig,
+      });
+      
+      // Update all config at once
+      onUpdate({
+        config: updatedConfig,
+      });
+      
+      console.log('[PipelineNodeConfig] After onUpdate call:', {
+        nodeId,
+        filename: result.file_info.filename,
+        file_id: result.file_info.file_id,
+      });
+      
+      // Verify the update after a short delay
+      setTimeout(() => {
+        const updatedNode = usePipelineStore.getState().currentPipeline?.nodes.find((n) => n.id === nodeId);
+        console.log('[PipelineNodeConfig] After onUpdate - verifying store:', {
+          nodeId,
+          hasUpdatedNode: !!updatedNode,
+          updatedConfig: updatedNode?.config,
+          updatedFilename: updatedNode?.config?.filename,
+          updatedFileId: updatedNode?.config?.file_id,
+        });
+      }, 100);
       
       setPendingFile(null);
       setIsUploading(false);
@@ -242,7 +365,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
 
   const handleExecuteStep = () => {
     // Execute just this node
-    startExecution();
+    executeSingleNode(nodeId);
   };
 
   const renderConfigFields = () => {
@@ -430,6 +553,112 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
               />
               <p className="text-xs text-gray-500 mt-1.5">
                 Leave empty to use global API key from settings
+              </p>
+            </div>
+
+            {/* Design Mode */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-2">
+                Design Mode
+              </label>
+              <select
+                value={node.config?.design_mode || 'unconditional'}
+                onChange={(e) => handleConfigChange('design_mode', e.target.value)}
+                className={inputClassName}
+              >
+                <option value="unconditional">Unconditional Design</option>
+                <option value="motif_scaffolding">Motif Scaffolding</option>
+                <option value="partial_diffusion">Partial Diffusion</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1.5">
+                Unconditional: new proteins | Motif: around structures | Partial: modify regions
+              </p>
+            </div>
+
+            {/* PDB ID */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-2">
+                PDB ID (optional)
+              </label>
+              <input
+                type="text"
+                value={node.config?.pdb_id || ''}
+                onChange={(e) => handleConfigChange('pdb_id', e.target.value)}
+                className={inputClassName}
+                placeholder="e.g., 1R42"
+              />
+              <p className="text-xs text-gray-500 mt-1.5">
+                Optional PDB ID to use as template (4-character code)
+              </p>
+            </div>
+
+            {/* Contigs */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-2">
+                Contigs *
+              </label>
+              <input
+                type="text"
+                value={node.config?.contigs || 'A50-150'}
+                onChange={(e) => handleConfigChange('contigs', e.target.value)}
+                className={inputClassName}
+                placeholder="A50-150"
+              />
+              <p className="text-xs text-gray-500 mt-1.5">
+                Contig specification (e.g., "A50-150" or "A20-60/0 50-100")
+              </p>
+            </div>
+
+            {/* Hotspot Residues */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-2">
+                Hotspot Residues (optional)
+              </label>
+              <input
+                type="text"
+                value={node.config?.hotspot_res || ''}
+                onChange={(e) => handleConfigChange('hotspot_res', e.target.value)}
+                className={inputClassName}
+                placeholder="A50, A51, A52"
+              />
+              <p className="text-xs text-gray-500 mt-1.5">
+                Comma-separated list of residues to preserve (e.g., "A50, A51, A52")
+              </p>
+            </div>
+
+            {/* Diffusion Steps */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-2">
+                Diffusion Steps
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={node.config?.diffusion_steps || 15}
+                onChange={(e) => handleConfigChange('diffusion_steps', parseInt(e.target.value) || 15)}
+                className={inputClassName}
+              />
+              <p className="text-xs text-gray-500 mt-1.5">
+                Number of diffusion steps (1-100, higher = better quality but slower)
+              </p>
+            </div>
+
+            {/* Number of Designs */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-2">
+                Number of Designs
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                value={node.config?.num_designs || 1}
+                onChange={(e) => handleConfigChange('num_designs', parseInt(e.target.value) || 1)}
+                className={inputClassName}
+              />
+              <p className="text-xs text-gray-500 mt-1.5">
+                Number of design variants to generate (1-10)
               </p>
             </div>
 
@@ -1160,13 +1389,24 @@ return {
             <p className="text-xs text-gray-500">{node.type}</p>
           </div>
         </div>
-        <button
-          onClick={handleExecuteStep}
-          className="px-3 py-1.5 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-500 flex items-center gap-1.5 transition-colors"
-        >
-          <Play className="w-3.5 h-3.5" />
-          Execute step
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExecuteStep}
+            className="px-3 py-1.5 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-500 flex items-center gap-1.5 transition-colors"
+          >
+            <Play className="w-3.5 h-3.5" />
+            Execute step
+          </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="p-1.5 text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 rounded transition-colors"
+              title="Close panel"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -1221,7 +1461,7 @@ return {
       {/* Main content - Three panel layout (INPUT | Configuration | OUTPUT) */}
       <div className="flex-1 flex min-h-0">
         {/* Left: INPUT Panel */}
-        <div className="w-64 border-r border-gray-700/50 bg-[#1a1a2e] flex flex-col">
+        <div className="w-[25%] min-w-[200px] max-w-[300px] border-r border-gray-700/50 bg-[#1a1a2e] flex flex-col flex-shrink-0">
           <div className="px-4 py-3 border-b border-gray-700/50 bg-[#1e1e32]">
             <h3 className="text-sm font-semibold text-gray-200">INPUT</h3>
           </div>
@@ -1494,6 +1734,139 @@ return {
                     className={inputClassName + ' opacity-50 cursor-not-allowed'}
                   />
                 </div>
+
+                {/* Execution Settings */}
+                <div className="border-t border-gray-700/50 pt-4 space-y-4">
+                  <p className="text-xs font-medium text-gray-400 mb-3">Execution Settings</p>
+                  
+                  {/* Always Output Data */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1">
+                        Always Output Data
+                      </label>
+                      <p className="text-xs text-gray-500">
+                        Always produce output even if empty
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={node.config?.always_output_data || false}
+                        onChange={(e) => handleConfigChange('always_output_data', e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
+                  </div>
+
+                  {/* Execute Once */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1">
+                        Execute Once
+                      </label>
+                      <p className="text-xs text-gray-500">
+                        Execute this node only once per workflow run
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={node.config?.execute_once || false}
+                        onChange={(e) => handleConfigChange('execute_once', e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
+                  </div>
+
+                  {/* Retry On Fail */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1">
+                        Retry On Fail
+                      </label>
+                      <p className="text-xs text-gray-500">
+                        Automatically retry if execution fails
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={node.config?.retry_on_fail || false}
+                        onChange={(e) => handleConfigChange('retry_on_fail', e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
+                  </div>
+
+                  {/* On Error */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-2">
+                      On Error
+                    </label>
+                    <select
+                      value={node.config?.on_error || 'stop_workflow'}
+                      onChange={(e) => handleConfigChange('on_error', e.target.value)}
+                      className={inputClassName}
+                    >
+                      <option value="stop_workflow">Stop Workflow</option>
+                      <option value="continue_workflow">Continue Workflow</option>
+                      <option value="retry">Retry</option>
+                      <option value="skip_node">Skip Node</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1.5">
+                      Action to take when this node encounters an error
+                    </p>
+                  </div>
+                </div>
+
+                {/* Notes Section */}
+                <div className="border-t border-gray-700/50 pt-4 space-y-4">
+                  <p className="text-xs font-medium text-gray-400 mb-3">Notes</p>
+                  
+                  {/* Notes Text Area */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-2">
+                      Notes
+                    </label>
+                    <textarea
+                      value={node.config?.notes || ''}
+                      onChange={(e) => handleConfigChange('notes', e.target.value)}
+                      className={`${inputClassName} resize-y`}
+                      rows={4}
+                      placeholder="Add notes about this node..."
+                    />
+                    <p className="text-xs text-gray-500 mt-1.5">
+                      Add notes or documentation for this node
+                    </p>
+                  </div>
+
+                  {/* Display Note in Flow */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1">
+                        Display Note in Flow?
+                      </label>
+                      <p className="text-xs text-gray-500">
+                        Show notes on the node in the canvas
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={node.config?.display_note_in_flow || false}
+                        onChange={(e) => handleConfigChange('display_note_in_flow', e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Delete Node */}
                 <div className="border-t border-gray-700/50 pt-4">
                   <button
                     onClick={onDelete}
@@ -1509,7 +1882,7 @@ return {
         </div>
 
         {/* Right: Execution Logs/Output */}
-        <div className="w-80 bg-[#1a1a2e] flex flex-col">
+        <div className="w-[30%] min-w-[250px] max-w-[400px] bg-[#1a1a2e] flex flex-col flex-shrink-0">
           <div className="px-4 py-3 border-b border-gray-700/50 bg-[#1e1e32] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-gray-200">OUTPUT</h3>
@@ -1528,7 +1901,7 @@ return {
           </div>
           
           {/* Output Tabs */}
-          {nodeLog && (
+          {(nodeLog || (node?.type === 'input_node' && (node.config?.filename || node.result_metadata?.file_info || node.result_metadata?.data))) && (
             <div className="flex border-b border-gray-700/50 bg-[#1e1e32]">
               <button
                 onClick={() => setOutputViewTab('table')}
@@ -1575,12 +1948,58 @@ return {
                 </p>
               </div>
             )}
-            {nodeLog ? (
+            {(() => {
+              // Check if we should show output - be more explicit about the condition
+              const hasFileData = node?.type === 'input_node' && (
+                node.config?.filename || 
+                node.config?.file_id || 
+                node.result_metadata?.file_info || 
+                node.result_metadata?.data
+              );
+              const shouldShowOutput = nodeLog || hasFileData;
+              
+              // Debug logging for input nodes
+              if (node?.type === 'input_node') {
+                console.log('[PipelineNodeConfig] Output section render check:', {
+                  nodeId,
+                  shouldShowOutput: !!shouldShowOutput,
+                  hasNodeLog: !!nodeLog,
+                  hasConfig: !!node.config,
+                  configObject: node.config,
+                  configKeys: node.config ? Object.keys(node.config) : null,
+                  hasConfigFilename: !!node.config?.filename,
+                  configFilename: node.config?.filename,
+                  hasConfigFileId: !!node.config?.file_id,
+                  configFileId: node.config?.file_id,
+                  hasResultMetadataFileInfo: !!node.result_metadata?.file_info,
+                  hasResultMetadataData: !!node.result_metadata?.data,
+                  hasFileData: !!hasFileData,
+                  conditionBreakdown: {
+                    isInputNode: node?.type === 'input_node',
+                    hasFilename: !!node.config?.filename,
+                    hasFileId: !!node.config?.file_id,
+                    hasFileInfo: !!node.result_metadata?.file_info,
+                    hasResultData: !!node.result_metadata?.data,
+                  },
+                });
+              }
+              
+              return !!shouldShowOutput;
+            })() ? (
               <div className="space-y-4">
                 {/* Extract output data - for HTTP requests, get response data */}
                 {(() => {
                   let outputData: any = null;
                   let itemCount = 0;
+                  
+                  // Log at the start of data extraction
+                  if (node?.type === 'input_node') {
+                    console.log('[PipelineNodeConfig] Starting output data extraction for input node:', {
+                      nodeId,
+                      hasNodeLog: !!nodeLog,
+                      hasConfig: !!node.config,
+                    });
+                  }
                   
                   // Debug logging for HTTP request nodes
                   if (node?.type === 'http_request_node') {
@@ -1596,13 +2015,67 @@ return {
                     });
                   }
                   
+                  // For input nodes, show data from config or result_metadata even without execution log
+                  if (node?.type === 'input_node') {
+                    // Check result_metadata first (stored after execution)
+                    if (node.result_metadata?.file_info) {
+                      outputData = node.result_metadata.file_info;
+                    } else if (node.result_metadata?.data) {
+                      outputData = node.result_metadata.data;
+                    } else if (nodeLog?.output?.data) {
+                      outputData = nodeLog.output.data;
+                    } else if (nodeLog?.output) {
+                      outputData = nodeLog.output;
+                    } else if (node.config?.filename || node.config?.file_id) {
+                      // Show config data if no execution log exists yet
+                      outputData = {
+                        type: 'pdb_file',
+                        filename: node.config.filename || 'Unknown',
+                        file_id: node.config.file_id,
+                        file_url: node.config.file_url,
+                        chains: node.config.chains,
+                        total_residues: node.config.total_residues,
+                        suggested_contigs: node.config.suggested_contigs,
+                        chain_residue_counts: node.config.chain_residue_counts,
+                        atoms: node.config.atoms,
+                      };
+                    }
+                    
+                    // Debug logging for input nodes
+                    console.log('[PipelineNodeConfig] Input node output data extraction:', {
+                      nodeId,
+                      hasNodeLog: !!nodeLog,
+                      hasResultMetadata: !!node.result_metadata,
+                      hasFileInfo: !!node.result_metadata?.file_info,
+                      hasResultData: !!node.result_metadata?.data,
+                      hasConfigFilename: !!node.config?.filename,
+                      configKeys: node.config ? Object.keys(node.config) : null,
+                      outputData: outputData,
+                      outputDataType: typeof outputData,
+                      outputDataKeys: outputData && typeof outputData === 'object' ? Object.keys(outputData) : null,
+                    });
+                    
+                    // Count items for input nodes
+                    if (outputData !== null && outputData !== undefined) {
+                      if (Array.isArray(outputData)) {
+                        itemCount = outputData.length;
+                      } else if (typeof outputData === 'object') {
+                        itemCount = Object.keys(outputData).length > 0 ? 1 : 0;
+                      } else {
+                        itemCount = 1;
+                      }
+                    }
+                  } else if (nodeLog) {
+                  // Always show errors if they exist
                   if (nodeLog?.error) {
-                    outputData = { error: nodeLog.error };
+                    outputData = { 
+                      error: nodeLog.error,
+                      status: nodeLog.status,
+                      ...(nodeLog.response && { response: nodeLog.response }),
+                    };
                     itemCount = 1;
-                  } else {
+                    } else if (nodeLog?.response?.data !== undefined && nodeLog?.response?.data !== null) {
                     // For HTTP requests, prioritize response.data, then output.data, then output
-                    // Also handle case where output might be the response data directly
-                    if (nodeLog?.response?.data !== undefined && nodeLog?.response?.data !== null) {
                       outputData = nodeLog.response.data;
                     } else if (nodeLog?.output !== undefined && nodeLog?.output !== null) {
                       // Check if output has a data property (nested structure)
@@ -1680,13 +2153,27 @@ return {
 
                         {/* JSON View */}
                         {outputViewTab === 'json' && (
-                          <div className="bg-gray-900/50 rounded-lg p-4 text-xs font-mono text-gray-300 overflow-x-auto border border-gray-700/30 min-h-[200px]">
+                          <div className={`rounded-lg p-4 text-xs font-mono overflow-x-auto border min-h-[200px] ${
+                            outputData?.error 
+                              ? 'bg-red-900/20 border-red-700/50 text-red-300' 
+                              : 'bg-gray-900/50 border-gray-700/30 text-gray-300'
+                          }`}>
                             <pre className="whitespace-pre-wrap">
                               {outputData !== null && outputData !== undefined ? (
                                 JSON.stringify(outputData, null, 2)
                               ) : (
                                 <span className="text-gray-500 italic">
                                   No output data available
+                                  {node?.type === 'input_node' && (
+                                    <div className="mt-2 text-xs space-y-1">
+                                      <div>Debug: nodeLog exists: {nodeLog ? 'yes' : 'no'}</div>
+                                      <div>hasConfig: {node.config ? 'yes' : 'no'}</div>
+                                      <div>hasFilename: {node.config?.filename ? 'yes' : 'no'}</div>
+                                      <div>filename: {node.config?.filename || 'none'}</div>
+                                      <div>hasResultMetadata: {node.result_metadata ? 'yes' : 'no'}</div>
+                                      <div>configKeys: {node.config ? Object.keys(node.config).join(', ') : 'none'}</div>
+                                    </div>
+                                  )}
                                   {node?.type === 'http_request_node' && (
                                     <div className="mt-2 text-xs">
                                       Debug: nodeLog exists: {nodeLog ? 'yes' : 'no'}, 
@@ -1703,7 +2190,89 @@ return {
                         {/* Table View */}
                         {outputViewTab === 'table' && (
                           <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700/30 min-h-[200px]">
-                            {outputData && typeof outputData === 'object' && !Array.isArray(outputData) ? (
+                            {/* Special formatted view for input node file metadata */}
+                            {node?.type === 'input_node' && outputData && typeof outputData === 'object' && outputData.type === 'pdb_file' ? (
+                              <div className="space-y-4">
+                                {/* File Information Section */}
+                                <div className="space-y-3">
+                                  <h4 className="text-sm font-semibold text-gray-200 border-b border-gray-700 pb-2">File Information</h4>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <span className="text-xs text-gray-500">Filename:</span>
+                                      <div className="text-xs text-gray-300 mt-1 font-mono">{outputData.filename || 'N/A'}</div>
+                                    </div>
+                                    <div>
+                                      <span className="text-xs text-gray-500">File ID:</span>
+                                      <div className="text-xs text-gray-300 mt-1 font-mono">{outputData.file_id || 'N/A'}</div>
+                                    </div>
+                                    {outputData.file_url && (
+                                      <div className="col-span-2">
+                                        <span className="text-xs text-gray-500">File URL:</span>
+                                        <div className="text-xs text-gray-300 mt-1 font-mono break-all">{outputData.file_url}</div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Structure Information Section */}
+                                {(outputData.chains || outputData.total_residues || outputData.atoms) && (
+                                  <div className="space-y-3 pt-3 border-t border-gray-700">
+                                    <h4 className="text-sm font-semibold text-gray-200 border-b border-gray-700 pb-2">Structure Information</h4>
+                                    <div className="grid grid-cols-2 gap-3">
+                                      {outputData.atoms && (
+                                        <div>
+                                          <span className="text-xs text-gray-500">Atoms:</span>
+                                          <div className="text-xs text-gray-300 mt-1">{outputData.atoms.toLocaleString()}</div>
+                                        </div>
+                                      )}
+                                      {outputData.total_residues && (
+                                        <div>
+                                          <span className="text-xs text-gray-500">Total Residues:</span>
+                                          <div className="text-xs text-gray-300 mt-1">{outputData.total_residues.toLocaleString()}</div>
+                                        </div>
+                                      )}
+                                      {outputData.chains && Array.isArray(outputData.chains) && (
+                                        <div className="col-span-2">
+                                          <span className="text-xs text-gray-500">Chains:</span>
+                                          <div className="text-xs text-gray-300 mt-1">
+                                            {outputData.chains.join(', ')} ({outputData.chains.length} chain{outputData.chains.length !== 1 ? 's' : ''})
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Chain Details Section */}
+                                {outputData.chain_residue_counts && typeof outputData.chain_residue_counts === 'object' && Object.keys(outputData.chain_residue_counts).length > 0 && (
+                                  <div className="space-y-3 pt-3 border-t border-gray-700">
+                                    <h4 className="text-sm font-semibold text-gray-200 border-b border-gray-700 pb-2">Chain Residue Counts</h4>
+                                    <div className="space-y-2">
+                                      {Object.entries(outputData.chain_residue_counts).map(([chain, count]) => (
+                                        <div key={chain} className="flex items-center justify-between text-xs">
+                                          <span className="text-gray-500">Chain {chain}:</span>
+                                          <span className="text-gray-300 font-medium">{count as number} residues</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* RFdiffusion Suggestions */}
+                                {outputData.suggested_contigs && (
+                                  <div className="space-y-3 pt-3 border-t border-gray-700">
+                                    <h4 className="text-sm font-semibold text-gray-200 border-b border-gray-700 pb-2">RFdiffusion Suggestions</h4>
+                                    <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                                      <div className="text-xs text-gray-500 mb-1">Suggested Contigs:</div>
+                                      <div className="text-xs text-blue-300 font-mono">{outputData.suggested_contigs}</div>
+                                      <div className="text-xs text-gray-500 mt-2 italic">
+                                        Use this value in RFdiffusion nodes for optimal design results.
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : outputData && typeof outputData === 'object' && !Array.isArray(outputData) ? (
                               <div className="space-y-2">
                                 {Object.entries(outputData).map(([key, value]) => (
                                   <div key={key} className="flex items-start gap-2 text-xs">
@@ -1796,14 +2365,14 @@ return {
                   <p className="text-sm text-gray-500 mb-1">
                     Execute this node to view data
                   </p>
-                  {node?.type === 'http_request_node' && (
-                    <div className="text-xs text-gray-600 mt-2 p-2 bg-gray-800/50 rounded">
-                      Debug: hasCurrentExecution={currentExecution ? 'yes' : 'no'}, 
-                      logsCount={currentExecution?.logs?.length || 0}, 
-                      hasNodeLog={nodeLog ? 'yes' : 'no'},
-                      nodeId={nodeId}
-                    </div>
-                  )}
+                  <div className="text-xs text-gray-600 mt-2 p-2 bg-gray-800/50 rounded">
+                    Debug: hasCurrentExecution={currentExecution ? 'yes' : 'no'}, 
+                    logsCount={currentExecution?.logs?.length || 0}, 
+                    hasNodeLog={nodeLog ? 'yes' : 'no'},
+                    nodeId={nodeId},
+                    nodeType={node?.type},
+                    isExecuting={usePipelineStore.getState().isExecuting}
+                  </div>
                   <button
                     onClick={handleExecuteStep}
                     className="text-xs text-red-400 hover:text-red-300 transition-colors"

@@ -1125,6 +1125,347 @@ async def rfdiffusion_cancel(request: Request, job_id: str):
         return JSONResponse(status_code=500, content=content)
 
 
+@app.post("/api/rfdiffusion/run")
+@limiter.limit("5/minute")
+async def rfdiffusion_run(request: Request):
+    """
+    Direct RFdiffusion endpoint for pipeline nodes.
+    Accepts pipeline node format and bridges to existing handler.
+    
+    Expected request body format (from pipeline node):
+    {
+        "pdb_file": "...",  # PDB content string, file path, or file ID
+        "contigs": "50",     # Contig specification
+        "num_designs": 1,    # Number of designs (optional)
+        "hotspot_res": [],   # Hotspot residues (optional)
+        "diffusion_steps": 15  # Diffusion steps (optional)
+    }
+    
+    Returns:
+    {
+        "status": "success",
+        "output_pdb": "...",  # PDB content string
+        "filename": "...",
+        "filepath": "..."
+    }
+    """
+    try:
+        body = await request.json()
+        
+        # Debug: Log incoming request - FULL DETAILS
+        print("=" * 80)
+        print("[RFdiffusion Run] ===== INCOMING REQUEST ======")
+        print(f"[RFdiffusion Run] Request body type: {type(body).__name__}")
+        if isinstance(body, dict):
+            print(f"[RFdiffusion Run] Request body keys: {list(body.keys())}")
+            for key, value in body.items():
+                if key == "pdb_file" and isinstance(value, str) and len(value) > 200:
+                    print(f"[RFdiffusion Run]   {key}: {type(value).__name__} (length: {len(value)}, preview: {value[:100]}...)")
+                elif isinstance(value, (dict, list)):
+                    print(f"[RFdiffusion Run]   {key}: {type(value).__name__} = {value}")
+                else:
+                    print(f"[RFdiffusion Run]   {key}: {type(value).__name__} = {repr(value)}")
+        else:
+            print(f"[RFdiffusion Run] Request body: {body}")
+        print("=" * 80)
+        
+        # Extract parameters from pipeline node format
+        pdb_file = body.get("pdb_file") or body.get("input_pdb")
+        pdb_id = body.get("pdb_id")
+        contigs = body.get("contigs", "A50-150")
+        num_designs = body.get("num_designs", 1)
+        hotspot_res_raw = body.get("hotspot_res", [])
+        # Parse hotspot_res - can be array or comma-separated string
+        if isinstance(hotspot_res_raw, str):
+            # If it's a string, parse it (even if empty)
+            if hotspot_res_raw.strip():
+                hotspot_res = [h.strip() for h in hotspot_res_raw.split(',') if h.strip()]
+            else:
+                hotspot_res = []  # Empty string = empty array
+        elif isinstance(hotspot_res_raw, list):
+            # Filter out empty strings from list
+            hotspot_res = [h for h in hotspot_res_raw if h and str(h).strip()]
+        else:
+            hotspot_res = []
+        
+        # Debug log hotspot_res
+        print(f"[RFdiffusion Run] hotspot_res: {hotspot_res} (type: {type(hotspot_res).__name__}, length: {len(hotspot_res)})")
+        diffusion_steps = body.get("diffusion_steps", 15)
+        design_mode = body.get("design_mode", "unconditional")
+        
+        # Handle pdb_file if it's an object (from input_node)
+        upload_id_from_object = None
+        if pdb_file and isinstance(pdb_file, dict):
+            # Extract file_id if it's a file metadata object
+            upload_id_from_object = pdb_file.get("file_id") or pdb_file.get("uploadId")
+            # Also check for pdb_id in the object
+            if not pdb_id and pdb_file.get("pdb_id"):
+                pdb_id = pdb_file.get("pdb_id")
+            # If it has file_id, use that as uploadId and clear pdb_file
+            if upload_id_from_object:
+                pdb_file = None  # Clear pdb_file so we use uploadId instead
+            else:
+                # If it's a dict but no file_id, try to extract other useful info
+                # Maybe it has file_url or we should treat it as invalid
+                # For now, clear it and let the handler deal with missing PDB
+                pdb_file = None
+        
+        # Generate job ID for tracking
+        job_id = f"rf_{int(time.time() * 1000)}"
+        
+        # Convert pipeline format to handler format
+        # The handler expects parameters in a specific structure
+        parameters = {
+            "contigs": contigs,
+            "diffusion_steps": diffusion_steps,
+            "design_mode": design_mode,
+            "num_designs": num_designs,
+        }
+        
+        # Only include hotspot_res if it's not empty
+        # Empty hotspot_res can cause API errors if the PDB doesn't match
+        # Also filter out any invalid/empty entries
+        if hotspot_res and len(hotspot_res) > 0:
+            # Filter out empty strings and ensure all entries are valid
+            filtered_hotspot_res = [h for h in hotspot_res if h and str(h).strip()]
+            if filtered_hotspot_res:
+                parameters["hotspot_res"] = filtered_hotspot_res
+                print(f"[RFdiffusion Run] Including hotspot_res: {filtered_hotspot_res}")
+            else:
+                print(f"[RFdiffusion Run] hotspot_res was provided but all values were empty, omitting it")
+        else:
+            print(f"[RFdiffusion Run] No hotspot_res provided, omitting from parameters")
+        
+        # Handle PDB ID if provided separately
+        if pdb_id and pdb_id.strip():
+            parameters["pdb_id"] = pdb_id.strip().upper()
+            parameters["design_mode"] = "motif_scaffolding"
+        
+        # Handle upload ID from object
+        if upload_id_from_object:
+            # Verify the upload ID exists before using it
+            try:
+                metadata = get_uploaded_pdb(upload_id_from_object)
+                if metadata and metadata.get("absolute_path"):
+                    parameters["uploadId"] = upload_id_from_object
+                    # Only set design_mode to motif_scaffolding if we have a PDB source
+                    if design_mode == "unconditional":
+                        parameters["design_mode"] = "motif_scaffolding"
+                    print(f"[RFdiffusion Run] Using uploadId: {upload_id_from_object}, file exists: {Path(metadata['absolute_path']).exists()}")
+                else:
+                    print(f"[RFdiffusion Run] Warning: uploadId {upload_id_from_object} not found in metadata")
+                    # If uploadId doesn't exist, don't set it - let handler deal with missing PDB
+            except Exception as e:
+                print(f"[RFdiffusion Run] Error checking uploadId {upload_id_from_object}: {e}")
+                # Don't set uploadId if we can't verify it
+        
+        # Track if we set input_pdb so we can update design_mode
+        has_input_pdb_set = False
+        
+        # Handle PDB file - could be:
+        # 1. PDB content string (starts with ATOM or HEADER)
+        # 2. File path (relative to server directory)
+        # 3. File ID (upload ID)
+        # 4. PDB ID (4-character code)
+        if pdb_file:
+            pdb_str = str(pdb_file).strip()
+            
+            # Check if it's PDB content (starts with ATOM or HEADER)
+            if pdb_str.startswith("ATOM") or pdb_str.startswith("HEADER"):
+                parameters["input_pdb"] = pdb_str
+                has_input_pdb_set = True
+                # If we have PDB content, we must use motif_scaffolding or partial_diffusion mode
+                # Unconditional mode doesn't accept input_pdb
+                if parameters.get("design_mode") == "unconditional":
+                    parameters["design_mode"] = "motif_scaffolding"
+                    print(f"[RFdiffusion Run] Changed design_mode from unconditional to motif_scaffolding (PDB content provided)")
+            # Check if it's a PDB ID (4 characters)
+            elif len(pdb_str) == 4 and pdb_str.isalnum():
+                parameters["pdb_id"] = pdb_str.upper()
+                parameters["design_mode"] = "motif_scaffolding"
+            # Check if it's a file path or upload ID
+            else:
+                # Try as upload ID first
+                try:
+                    metadata = get_uploaded_pdb(pdb_str)
+                    if metadata and metadata.get("absolute_path"):
+                        parameters["uploadId"] = pdb_str
+                        parameters["design_mode"] = "motif_scaffolding"
+                    else:
+                        # Try as file path
+                        pdb_path = Path(__file__).parent / pdb_str
+                        if pdb_path.exists():
+                            parameters["input_pdb"] = pdb_path.read_text()
+                            has_input_pdb_set = True
+                            # If we have PDB content, use motif_scaffolding mode
+                            if parameters.get("design_mode") == "unconditional":
+                                parameters["design_mode"] = "motif_scaffolding"
+                                print(f"[RFdiffusion Run] Changed design_mode from unconditional to motif_scaffolding (PDB file found)")
+                        else:
+                            # Assume it's PDB content
+                            parameters["input_pdb"] = pdb_str
+                            has_input_pdb_set = True
+                            # If we have PDB content, use motif_scaffolding mode
+                            if parameters.get("design_mode") == "unconditional":
+                                parameters["design_mode"] = "motif_scaffolding"
+                                print(f"[RFdiffusion Run] Changed design_mode from unconditional to motif_scaffolding (assuming PDB content)")
+                except Exception as e:
+                    log_line("rfdiffusion_run_pdb_resolve_warning", {
+                        "pdb_source": pdb_str,
+                        "error": str(e)
+                    })
+                    parameters["input_pdb"] = pdb_str
+                    # If we have PDB content, use motif_scaffolding mode
+                    if parameters.get("design_mode") == "unconditional":
+                        parameters["design_mode"] = "motif_scaffolding"
+        
+        # Final check: if we have input_pdb but design_mode is still unconditional, change it
+        if parameters.get("input_pdb") and parameters.get("design_mode") == "unconditional":
+            parameters["design_mode"] = "motif_scaffolding"
+            print(f"[RFdiffusion Run] Final fix: Changed design_mode from unconditional to motif_scaffolding (input_pdb present)")
+        
+        # Debug: Log parameters being sent to handler - FULL DETAILS
+        print("=" * 80)
+        print("[RFdiffusion Run] ===== PARAMETERS TO HANDLER ======")
+        print(f"[RFdiffusion Run] Parameters keys: {list(parameters.keys())}")
+        for key, value in parameters.items():
+            if key == "input_pdb" and isinstance(value, str) and len(value) > 200:
+                print(f"[RFdiffusion Run]   {key}: {type(value).__name__} (length: {len(value)}, preview: {value[:100]}...)")
+            elif isinstance(value, (dict, list)):
+                print(f"[RFdiffusion Run]   {key}: {type(value).__name__} = {value}")
+            else:
+                print(f"[RFdiffusion Run]   {key}: {type(value).__name__} = {repr(value)}")
+        print(f"[RFdiffusion Run] Design mode: {parameters.get('design_mode')}")
+        print(f"[RFdiffusion Run] Has uploadId: {bool(parameters.get('uploadId'))}")
+        if parameters.get('uploadId'):
+            # Verify uploadId exists before calling handler
+            try:
+                upload_metadata = get_uploaded_pdb(parameters.get('uploadId'))
+                if upload_metadata:
+                    print(f"[RFdiffusion Run] UploadId verified, file path: {upload_metadata.get('absolute_path')}")
+                else:
+                    print(f"[RFdiffusion Run] WARNING: UploadId {parameters.get('uploadId')} not found!")
+            except Exception as e:
+                print(f"[RFdiffusion Run] ERROR checking uploadId: {e}")
+        print(f"[RFdiffusion Run] Has pdb_id: {bool(parameters.get('pdb_id'))}")
+        print(f"[RFdiffusion Run] Has input_pdb: {bool(parameters.get('input_pdb'))}")
+        if parameters.get('input_pdb'):
+            input_pdb_val = parameters.get('input_pdb')
+            print(f"[RFdiffusion Run] input_pdb type: {type(input_pdb_val).__name__}, length: {len(input_pdb_val) if isinstance(input_pdb_val, str) else 'N/A'}")
+        print("=" * 80)
+        
+        # Call existing handler
+        result = await rfdiffusion_handler.submit_design_job({
+            "parameters": parameters,
+            "jobId": job_id,
+            "sessionId": None,  # Pipeline nodes don't use sessions
+        })
+        
+        # Check for errors
+        if result.get("status") == "error":
+            error_msg = result.get("error", "Unknown error")
+            # Log the error for debugging
+            log_line("rfdiffusion_run_handler_error", {
+                "error": error_msg,
+                "job_id": job_id,
+                "parameters_keys": list(parameters.keys()),
+                "design_mode": parameters.get("design_mode"),
+                "has_input_pdb": bool(parameters.get("input_pdb")),
+                "has_uploadId": bool(parameters.get("uploadId")),
+                "has_pdb_id": bool(parameters.get("pdb_id"))
+            })
+            print(f"[RFdiffusion Run] Handler returned error: {error_msg}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "status": "error",
+                    "error": error_msg,
+                    "response": {
+                        "status": 500,
+                        "statusText": "Internal Server Error",
+                        "headers": {},
+                        "data": {"detail": error_msg}
+                    }
+                }
+            )
+        
+        # Success case - extract PDB content
+        if result.get("status") == "success":
+            data = result.get("data", {})
+            pdb_content = data.get("pdbContent")
+            filename = data.get("filename", f"rfdiffusion_{job_id}.pdb")
+            filepath = data.get("filepath")
+            
+            if pdb_content:
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "success",
+                        "output_pdb": pdb_content,
+                        "filename": filename,
+                        "filepath": filepath,
+                        "data": {
+                            "pdbContent": pdb_content,
+                            "filename": filename,
+                            "filepath": filepath
+                        }
+                    }
+                )
+            else:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "status": "error",
+                        "error": "No PDB content in response",
+                        "response": {
+                            "status": 500,
+                            "statusText": "Internal Server Error",
+                            "headers": {},
+                            "data": {"detail": "No PDB content in response"}
+                        }
+                    }
+                )
+        
+        # Unexpected status
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": f"Unexpected status: {result.get('status')}",
+                "response": {
+                    "status": 500,
+                    "statusText": "Internal Server Error",
+                    "headers": {},
+                    "data": {"detail": f"Unexpected status: {result.get('status')}"}
+                }
+            }
+        )
+        
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        error_msg = str(e)
+        log_line("rfdiffusion_run_failed", {
+            "error": error_msg,
+            "trace": error_trace,
+            "body_keys": list(body.keys()) if isinstance(body, dict) else "not_dict",
+            "body_pdb_file_type": type(body.get("pdb_file")).__name__ if isinstance(body, dict) and body.get("pdb_file") else "unknown"
+        })
+        print(f"[RFdiffusion Run Error] {error_msg}\n{error_trace}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": error_msg,
+                "response": {
+                    "status": 500,
+                    "statusText": "Internal Server Error",
+                    "headers": {},
+                    "data": {"detail": error_msg if DEBUG_API else "Internal server error"}
+                }
+            }
+        )
+
+
 # Back-compat endpoints
 @app.post("/api/generate")
 async def generate(request: Request):

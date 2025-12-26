@@ -62,6 +62,10 @@ interface PipelineState {
   viewMode: 'editor' | 'executions';
   selectedLogNodeId: string | null;
   
+  // Auto-save state
+  lastSavedAt: Date | null;
+  isSaving: boolean;
+  
   // Actions
   setCurrentPipeline: (pipeline: Pipeline | null) => void;
   setGhostBlueprint: (blueprint: PipelineBlueprint | null) => void;
@@ -76,6 +80,7 @@ interface PipelineState {
   loadPipeline: (pipelineId: string) => void;
   deletePipeline: (pipelineId: string) => void;
   startExecution: () => void;
+  executeSingleNode: (nodeId: string) => void;
   stopExecution: () => void;
   updateNodeStatus: (nodeId: string, status: NodeStatus, error?: string) => void;
   clearPipeline: () => void;
@@ -89,6 +94,40 @@ interface PipelineState {
   updateExecutionLog: (nodeId: string, updates: Partial<ExecutionLogEntry>) => void;
 }
 
+// Debounce timer for auto-save (shared across store instances)
+let autoSaveTimer: NodeJS.Timeout | null = null;
+const DRAFT_KEY = 'novoprotein-pipeline-draft';
+const UNNAMED_PIPELINE_NAME = 'Unnamed Pipeline';
+
+const debouncedAutoSave = (get: () => PipelineState, set: (partial: Partial<PipelineState>) => void) => {
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+  }
+  
+  autoSaveTimer = setTimeout(() => {
+    const { currentPipeline } = get();
+    if (!currentPipeline) return;
+    
+    set({ isSaving: true });
+    
+    try {
+      // Save draft to localStorage (including unnamed pipelines)
+      const draft = {
+        ...currentPipeline,
+        updatedAt: new Date(),
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      set({ 
+        lastSavedAt: new Date(),
+        isSaving: false 
+      });
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+      set({ isSaving: false });
+    }
+  }, 1000); // 1 second debounce
+};
+
 export const usePipelineStore = create<PipelineState>()(
   persist(
     (set, get) => ({
@@ -101,8 +140,26 @@ export const usePipelineStore = create<PipelineState>()(
       executionHistory: [],
       viewMode: 'editor',
       selectedLogNodeId: null,
+      lastSavedAt: null,
+      isSaving: false,
       
-      setCurrentPipeline: (pipeline) => set({ currentPipeline: pipeline }),
+      setCurrentPipeline: (pipeline) => {
+        if (pipeline) {
+          const { savedPipelines } = get();
+          // Update savedPipelines if this pipeline already exists in the list
+          const existingIndex = savedPipelines.findIndex((p) => p.id === pipeline.id);
+          if (existingIndex >= 0) {
+            const updated = [...savedPipelines];
+            updated[existingIndex] = pipeline;
+            set({ currentPipeline: pipeline, savedPipelines: updated });
+          } else {
+            set({ currentPipeline: pipeline });
+          }
+          debouncedAutoSave(get, set);
+        } else {
+          set({ currentPipeline: null });
+        }
+      },
       
       setGhostBlueprint: (blueprint) => set({ ghostBlueprint: blueprint }),
       
@@ -118,7 +175,7 @@ export const usePipelineStore = create<PipelineState>()(
         
         const pipeline: Pipeline = {
           id: `pipeline_${Date.now()}`,
-          name: 'New Pipeline',
+          name: UNNAMED_PIPELINE_NAME,
           nodes,
           edges: ghostBlueprint.edges,
           createdAt: new Date(),
@@ -126,10 +183,14 @@ export const usePipelineStore = create<PipelineState>()(
           status: 'draft',
         };
         
+        const { savedPipelines } = get();
+        // Add to saved pipelines list (but won't be persisted)
         set({ 
           currentPipeline: pipeline,
           ghostBlueprint: null,
+          savedPipelines: [...savedPipelines, pipeline],
         });
+        debouncedAutoSave(get, set);
       },
       
       rejectBlueprint: () => set({ ghostBlueprint: null }),
@@ -139,58 +200,108 @@ export const usePipelineStore = create<PipelineState>()(
         if (!currentPipeline) {
           const newPipeline: Pipeline = {
             id: `pipeline_${Date.now()}`,
-            name: 'New Pipeline',
+            name: UNNAMED_PIPELINE_NAME,
             nodes: [node],
             edges: [],
             createdAt: new Date(),
             updatedAt: new Date(),
             status: 'draft',
           };
-          set({ currentPipeline: newPipeline });
-        } else {
-          set({
-            currentPipeline: {
-              ...currentPipeline,
-              nodes: [...currentPipeline.nodes, node],
-              updatedAt: new Date(),
-            },
+          const { savedPipelines } = get();
+          // Add to saved pipelines list (but won't be persisted)
+          set({ 
+            currentPipeline: newPipeline,
+            savedPipelines: [...savedPipelines, newPipeline],
           });
+          debouncedAutoSave(get, set);
+        } else {
+          const updatedPipeline = {
+            ...currentPipeline,
+            nodes: [...currentPipeline.nodes, node],
+            updatedAt: new Date(),
+          };
+          const { savedPipelines } = get();
+          // Update savedPipelines if this pipeline exists in the list
+          const existingIndex = savedPipelines.findIndex((p) => p.id === currentPipeline.id);
+          if (existingIndex >= 0) {
+            const updated = [...savedPipelines];
+            updated[existingIndex] = updatedPipeline;
+            set({ 
+              currentPipeline: updatedPipeline,
+              savedPipelines: updated,
+            });
+          } else {
+            set({ currentPipeline: updatedPipeline });
+          }
+          debouncedAutoSave(get, set);
         }
       },
       
       updateNode: (nodeId, updates) => {
-        const { currentPipeline } = get();
+        const { currentPipeline, savedPipelines } = get();
         if (!currentPipeline) return;
         
-        set({
-          currentPipeline: {
-            ...currentPipeline,
-            nodes: currentPipeline.nodes.map((node) =>
-              node.id === nodeId ? { ...node, ...updates } : node
-            ),
-            updatedAt: new Date(),
-          },
-        });
+        const updatedPipeline = {
+          ...currentPipeline,
+          nodes: currentPipeline.nodes.map((node) => {
+            if (node.id === nodeId) {
+              // Deep merge config if it exists in updates
+              const mergedNode = { ...node, ...updates };
+              if (updates.config && node.config) {
+                mergedNode.config = { ...node.config, ...updates.config };
+              }
+              return mergedNode;
+            }
+            return node;
+          }),
+          updatedAt: new Date(),
+        };
+        
+        // Update savedPipelines if this pipeline exists in the list
+        const existingIndex = savedPipelines.findIndex((p) => p.id === currentPipeline.id);
+        if (existingIndex >= 0) {
+          const updated = [...savedPipelines];
+          updated[existingIndex] = updatedPipeline;
+          set({ 
+            currentPipeline: updatedPipeline,
+            savedPipelines: updated,
+          });
+        } else {
+          set({ currentPipeline: updatedPipeline });
+        }
+        debouncedAutoSave(get, set);
       },
       
       deleteNode: (nodeId) => {
-        const { currentPipeline } = get();
+        const { currentPipeline, savedPipelines } = get();
         if (!currentPipeline) return;
         
-        set({
-          currentPipeline: {
-            ...currentPipeline,
-            nodes: currentPipeline.nodes.filter((node) => node.id !== nodeId),
-            edges: currentPipeline.edges.filter(
-              (edge) => edge.source !== nodeId && edge.target !== nodeId
-            ),
-            updatedAt: new Date(),
-          },
-        });
+        const updatedPipeline = {
+          ...currentPipeline,
+          nodes: currentPipeline.nodes.filter((node) => node.id !== nodeId),
+          edges: currentPipeline.edges.filter(
+            (edge) => edge.source !== nodeId && edge.target !== nodeId
+          ),
+          updatedAt: new Date(),
+        };
+        
+        // Update savedPipelines if this pipeline exists in the list
+        const existingIndex = savedPipelines.findIndex((p) => p.id === currentPipeline.id);
+        if (existingIndex >= 0) {
+          const updated = [...savedPipelines];
+          updated[existingIndex] = updatedPipeline;
+          set({ 
+            currentPipeline: updatedPipeline,
+            savedPipelines: updated,
+          });
+        } else {
+          set({ currentPipeline: updatedPipeline });
+        }
+        debouncedAutoSave(get, set);
       },
       
       addEdge: (source, target) => {
-        const { currentPipeline } = get();
+        const { currentPipeline, savedPipelines } = get();
         if (!currentPipeline) return;
         
         // Check if edge already exists
@@ -200,28 +311,52 @@ export const usePipelineStore = create<PipelineState>()(
         
         if (edgeExists) return;
         
-        set({
-          currentPipeline: {
-            ...currentPipeline,
-            edges: [...currentPipeline.edges, { source, target }],
-            updatedAt: new Date(),
-          },
-        });
+        const updatedPipeline = {
+          ...currentPipeline,
+          edges: [...currentPipeline.edges, { source, target }],
+          updatedAt: new Date(),
+        };
+        
+        // Update savedPipelines if this pipeline exists in the list
+        const existingIndex = savedPipelines.findIndex((p) => p.id === currentPipeline.id);
+        if (existingIndex >= 0) {
+          const updated = [...savedPipelines];
+          updated[existingIndex] = updatedPipeline;
+          set({ 
+            currentPipeline: updatedPipeline,
+            savedPipelines: updated,
+          });
+        } else {
+          set({ currentPipeline: updatedPipeline });
+        }
+        debouncedAutoSave(get, set);
       },
       
       deleteEdge: (source, target) => {
-        const { currentPipeline } = get();
+        const { currentPipeline, savedPipelines } = get();
         if (!currentPipeline) return;
         
-        set({
-          currentPipeline: {
-            ...currentPipeline,
-            edges: currentPipeline.edges.filter(
-              (edge) => !(edge.source === source && edge.target === target)
-            ),
-            updatedAt: new Date(),
-          },
-        });
+        const updatedPipeline = {
+          ...currentPipeline,
+          edges: currentPipeline.edges.filter(
+            (edge) => !(edge.source === source && edge.target === target)
+          ),
+          updatedAt: new Date(),
+        };
+        
+        // Update savedPipelines if this pipeline exists in the list
+        const existingIndex = savedPipelines.findIndex((p) => p.id === currentPipeline.id);
+        if (existingIndex >= 0) {
+          const updated = [...savedPipelines];
+          updated[existingIndex] = updatedPipeline;
+          set({ 
+            currentPipeline: updatedPipeline,
+            savedPipelines: updated,
+          });
+        } else {
+          set({ currentPipeline: updatedPipeline });
+        }
+        debouncedAutoSave(get, set);
       },
       
       savePipeline: (name) => {
@@ -240,10 +375,23 @@ export const usePipelineStore = create<PipelineState>()(
           // Update existing
           const updated = [...savedPipelines];
           updated[existingIndex] = pipelineToSave;
-          set({ savedPipelines: updated });
+          set({ 
+            savedPipelines: updated,
+            lastSavedAt: new Date(),
+          });
         } else {
           // Add new
-          set({ savedPipelines: [...savedPipelines, pipelineToSave] });
+          set({ 
+            savedPipelines: [...savedPipelines, pipelineToSave],
+            lastSavedAt: new Date(),
+          });
+        }
+        
+        // Also update draft
+        try {
+          localStorage.setItem(DRAFT_KEY, JSON.stringify(pipelineToSave));
+        } catch (error) {
+          console.error('Failed to save draft:', error);
         }
       },
       
@@ -251,7 +399,15 @@ export const usePipelineStore = create<PipelineState>()(
         const { savedPipelines } = get();
         const pipeline = savedPipelines.find((p) => p.id === pipelineId);
         if (pipeline) {
-          set({ currentPipeline: { ...pipeline } });
+          // Convert updatedAt to Date if it's a string (from localStorage)
+          const updatedAt = pipeline.updatedAt instanceof Date 
+            ? pipeline.updatedAt 
+            : new Date(pipeline.updatedAt);
+          
+          set({ 
+            currentPipeline: { ...pipeline },
+            lastSavedAt: isNaN(updatedAt.getTime()) ? new Date() : updatedAt,
+          });
         }
       },
       
@@ -312,6 +468,64 @@ export const usePipelineStore = create<PipelineState>()(
               ...node,
               status: node.status === 'success' ? 'success' : 'pending',
             })),
+          },
+        });
+      },
+      
+      executeSingleNode: (nodeId: string) => {
+        const { currentPipeline, addExecutionLog } = get();
+        if (!currentPipeline) return;
+        
+        const node = currentPipeline.nodes.find((n) => n.id === nodeId);
+        if (!node) return;
+        
+        // For input nodes, validate they have a filename
+        if (node.type === 'input_node' && !node.config?.filename) {
+          set({
+            currentPipeline: {
+              ...currentPipeline,
+              nodes: currentPipeline.nodes.map((n) =>
+                n.id === nodeId
+                  ? { ...n, status: 'error' as NodeStatus, error: 'No filename specified for input node' }
+                  : n
+              ),
+            },
+          });
+          return;
+        }
+        
+        // Create execution order with just this node (and its dependencies if needed)
+        // For input nodes, they have no dependencies, so just execute the node
+        const executionOrder = [nodeId];
+        
+        // Create new execution session
+        const newExecution: ExecutionSession = {
+          id: `exec_${Date.now()}`,
+          startedAt: new Date(),
+          status: 'running',
+          logs: [],
+        };
+        
+        // Create log entry BEFORE execution starts so it shows up immediately
+        addExecutionLog({
+          nodeId,
+          nodeLabel: node.label,
+          nodeType: node.type,
+          status: 'running',
+        });
+        
+        set({
+          isExecuting: true,
+          executionOrder,
+          currentExecution: newExecution,
+          currentPipeline: {
+            ...currentPipeline,
+            status: 'running',
+            nodes: currentPipeline.nodes.map((n) =>
+              n.id === nodeId
+                ? { ...n, status: 'pending' }
+                : n
+            ),
           },
         });
       },
@@ -413,6 +627,7 @@ export const usePipelineStore = create<PipelineState>()(
             updatedAt: new Date(),
           },
         });
+        debouncedAutoSave(get, set);
       },
       
       clearPipeline: () => {
@@ -422,7 +637,14 @@ export const usePipelineStore = create<PipelineState>()(
           isExecuting: false,
           executionOrder: [],
           currentExecution: null,
+          lastSavedAt: null,
         });
+        // Clear draft
+        try {
+          localStorage.removeItem(DRAFT_KEY);
+        } catch (error) {
+          console.error('Failed to clear draft:', error);
+        }
       },
       
       setViewMode: (mode) => set({ viewMode: mode }),
@@ -469,9 +691,45 @@ export const usePipelineStore = create<PipelineState>()(
       version: 1,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
+        // Persist all pipelines including unnamed ones
         savedPipelines: state.savedPipelines,
-        // Don't persist currentPipeline or execution state
+        // Don't persist currentPipeline or execution state - it's saved as draft separately
       }),
+      // Load draft on initialization
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          try {
+            // Convert date strings to Date objects for all pipelines
+            state.savedPipelines = state.savedPipelines.map((pipeline) => {
+              if (pipeline.createdAt && typeof pipeline.createdAt === 'string') {
+                pipeline.createdAt = new Date(pipeline.createdAt);
+              }
+              if (pipeline.updatedAt && typeof pipeline.updatedAt === 'string') {
+                pipeline.updatedAt = new Date(pipeline.updatedAt);
+              }
+              return pipeline;
+            });
+            
+            const draft = localStorage.getItem(DRAFT_KEY);
+            if (draft) {
+              const parsed = JSON.parse(draft);
+              // Restore draft (including unnamed pipelines)
+              state.setCurrentPipeline(parsed);
+              // Convert updatedAt to Date if it's a string (from localStorage)
+              if (parsed.updatedAt) {
+                const updatedAt = parsed.updatedAt instanceof Date 
+                  ? parsed.updatedAt 
+                  : new Date(parsed.updatedAt);
+                state.lastSavedAt = isNaN(updatedAt.getTime()) ? new Date() : updatedAt;
+              } else {
+                state.lastSavedAt = new Date();
+              }
+            }
+          } catch (error) {
+            console.error('Failed to load draft:', error);
+          }
+        }
+      },
     }
   )
 );

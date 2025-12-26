@@ -133,6 +133,18 @@ npm run type-check
 npm run build
 ```
 
+### Creating New Node Types
+
+When creating a new node type, **please read the [Node Development Guide](../../docs/node-development-guide.md)** first. It covers critical best practices and common pitfalls, including:
+
+- ✅ Always initialize nodes with default config
+- ✅ Keep execution logs accessible after completion
+- ✅ Don't force navigation during execution
+- ✅ Handle multiple data structures in output extraction
+- ✅ Common pitfalls and how to avoid them
+
+This guide will save you time and prevent common issues!
+
 ## Project Structure
 
 ```

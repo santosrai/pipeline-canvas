@@ -315,5 +315,31 @@
         ]
       }
     }
+  ],
+  "3f0ac7f0-c0f0-4f23-be7c-7909b39431a8": [
+    {
+      "file_id": "rf_1766708366547",
+      "type": "rfdiffusion",
+      "file_path": "rfdiffusion_results/rfdiffusion_rf_1766708366547.pdb",
+      "filename": "rfdiffusion_rf_1766708366547.pdb",
+      "size": 26532,
+      "job_id": "rf_1766708366547",
+      "metadata": {
+        "parameters": {
+          "pdb_id": "1R42",
+          "contigs": "A20-60/0 50-100",
+          "hotspot_res": [
+            "A50",
+            "A51",
+            "A52",
+            "A53",
+            "A54"
+          ],
+          "diffusion_steps": 15,
+          "design_mode": "unconditional"
+        },
+        "design_mode": "unconditional"
+      }
+    }
   ]
 }

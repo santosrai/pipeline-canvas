@@ -139,11 +139,19 @@ class RFdiffusionClient:
         if design_mode == "unconditional" and not has_pdb:
             # Unconditional design without template - create payload without input_pdb
             logger.info("Creating unconditional design payload without PDB template")
-            return {
+            payload = {
                 "contigs": default_params["contigs"],
-                "hotspot_res": default_params["hotspot_res"],
                 "diffusion_steps": default_params["diffusion_steps"],
             }
+            
+            # Only include hotspot_res if it's not empty
+            hotspot_res = default_params.get("hotspot_res", [])
+            if hotspot_res and len(hotspot_res) > 0:
+                filtered_hotspot_res = [h for h in hotspot_res if h and str(h).strip()]
+                if filtered_hotspot_res:
+                    payload["hotspot_res"] = filtered_hotspot_res
+            
+            return payload
         
         # For other modes, PDB is required
         if has_pdb_id and not has_input_pdb:
@@ -156,12 +164,22 @@ class RFdiffusionClient:
         else:
             raise ValueError(f"Either input_pdb content or pdb_id must be provided (or use unconditional design_mode). Current design_mode: {design_mode}, has_pdb: {has_pdb}")
         
-        return {
+        payload = {
             "input_pdb": input_pdb,
             "contigs": default_params["contigs"],
-            "hotspot_res": default_params["hotspot_res"],
             "diffusion_steps": default_params["diffusion_steps"],
         }
+        
+        # Only include hotspot_res if it's not empty
+        # Empty hotspot_res can cause validation errors
+        hotspot_res = default_params.get("hotspot_res", [])
+        if hotspot_res and len(hotspot_res) > 0:
+            # Filter out empty strings
+            filtered_hotspot_res = [h for h in hotspot_res if h and str(h).strip()]
+            if filtered_hotspot_res:
+                payload["hotspot_res"] = filtered_hotspot_res
+        
+        return payload
     
     async def submit_design_request(
         self, 
@@ -181,8 +199,34 @@ class RFdiffusionClient:
         
         try:
             logger.debug(f"submit_design_request called with params: {list(params.keys())}")
+            # Debug: Log params received by client
+            print("=" * 80)
+            print(f"[RFdiffusion Client] ===== PARAMS RECEIVED ======")
+            for key, value in params.items():
+                if key == "input_pdb" and isinstance(value, str) and len(value) > 200:
+                    print(f"[RFdiffusion Client]   {key}: {type(value).__name__} (length: {len(value)}, preview: {value[:100]}...)")
+                elif isinstance(value, (dict, list)):
+                    print(f"[RFdiffusion Client]   {key}: {type(value).__name__} = {value}")
+                else:
+                    print(f"[RFdiffusion Client]   {key}: {type(value).__name__} = {repr(value)}")
+            print("=" * 80)
+            
             payload = self.create_request_payload(**params)
             logger.debug(f"Created payload with keys: {list(payload.keys())}")
+            
+            # Debug: Log final payload being sent to NVIDIA API
+            print("=" * 80)
+            print(f"[RFdiffusion Client] ===== FINAL PAYLOAD TO NVIDIA API ======")
+            print(f"[RFdiffusion Client] URL: {self.base_url}")
+            print(f"[RFdiffusion Client] Payload keys: {list(payload.keys())}")
+            for key, value in payload.items():
+                if key == "input_pdb" and isinstance(value, str) and len(value) > 200:
+                    print(f"[RFdiffusion Client]   {key}: {type(value).__name__} (length: {len(value)}, preview: {value[:100]}...)")
+                elif isinstance(value, (dict, list)):
+                    print(f"[RFdiffusion Client]   {key}: {type(value).__name__} = {value}")
+                else:
+                    print(f"[RFdiffusion Client]   {key}: {type(value).__name__} = {repr(value)}")
+            print("=" * 80)
             
             if progress_callback:
                 progress_callback("Submitting protein design request...", 0)

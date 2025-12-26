@@ -47,8 +47,26 @@ async function getInputData(
 
   // Extract data based on node type and dataType
   if (sourceNode.type === 'input_node') {
-    if (handle.dataType === 'pdb_file') {
-      return sourceNode.config?.filename || null;
+    if (handle.dataType === 'pdb_file' || !handle.dataType) {
+      // Return full file metadata from result_metadata if available, otherwise from config
+      if (sourceNode.result_metadata?.file_info) {
+        return sourceNode.result_metadata.file_info;
+      } else if (sourceNode.result_metadata?.data) {
+        return sourceNode.result_metadata.data;
+      } else {
+        // Fallback to config data
+        return {
+          type: 'pdb_file',
+          filename: sourceNode.config?.filename,
+          file_id: sourceNode.config?.file_id,
+          file_url: sourceNode.config?.file_url,
+          chains: sourceNode.config?.chains,
+          total_residues: sourceNode.config?.total_residues,
+          suggested_contigs: sourceNode.config?.suggested_contigs,
+          chain_residue_counts: sourceNode.config?.chain_residue_counts,
+          atoms: sourceNode.config?.atoms,
+        };
+      }
     }
   }
 
@@ -342,6 +360,8 @@ export async function executeNode(
                   } else {
                     resolvedPayload = bodyJson;
                   }
+                  // CRITICAL: Resolve template variables in the parsed payload
+                  resolvedPayload = resolveTemplates(resolvedPayload, node, inputData);
                 } catch (e) {
                   throw new Error(`Invalid JSON body: ${e}`);
                 }
@@ -353,8 +373,14 @@ export async function executeNode(
                   } else {
                     resolvedPayload = bodyJson;
                   }
+                  // CRITICAL: Resolve template variables in the parsed payload
+                  resolvedPayload = resolveTemplates(resolvedPayload, node, inputData);
                 } catch (e) {
                   resolvedPayload = bodyJson; // Fallback to raw string
+                  // Even for raw string, try to resolve templates if it's a string
+                  if (typeof resolvedPayload === 'string') {
+                    resolvedPayload = resolveTemplates(resolvedPayload, node, inputData);
+                  }
                 }
               } else if (bodyRaw && (bodyContentType === 'raw' || bodyContentType === 'text' || bodyContentType === 'xml')) {
                 // Raw body content (text, XML, or raw)
@@ -362,6 +388,8 @@ export async function executeNode(
               } else if (legacyPayload) {
                 // Use legacy payload structure
                 resolvedPayload = legacyPayload;
+                // CRITICAL: Resolve template variables in legacy payload
+                resolvedPayload = resolveTemplates(resolvedPayload, node, inputData);
               }
               
               // Set Content-Type header based on body_content_type
@@ -517,8 +545,30 @@ export async function executeNode(
         throw new Error('No filename specified for input node');
       }
       // In a real implementation, you might want to verify the file exists
-      // For now, we'll just return success
-      return { success: true, filename };
+      // For now, we'll just return success with consistent structure
+      const fileData = {
+        type: 'pdb_file',
+        filename: filename,
+        file_id: node.config?.file_id,
+        file_url: node.config?.file_url,
+        chains: node.config?.chains,
+        total_residues: node.config?.total_residues,
+        suggested_contigs: node.config?.suggested_contigs,
+        chain_residue_counts: node.config?.chain_residue_counts,
+        atoms: node.config?.atoms,
+      };
+      return {
+        data: fileData,
+        request: {
+          type: 'file_check',
+          filename: filename,
+        },
+        response: {
+          status: 200,
+          statusText: 'OK',
+          data: fileData,
+        },
+      };
 
     case 'log':
       // For message input nodes, log the message
