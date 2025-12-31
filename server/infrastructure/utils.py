@@ -59,6 +59,36 @@ def strip_code_fences(text: str) -> str:
     return t.strip()
 
 
+def extract_code_and_text(content: str) -> tuple:
+    """Extract code and text from content that may contain code fences.
+    
+    Returns:
+        tuple: (code, text) where code is the content inside code fences,
+               and text is everything outside code fences.
+    """
+    import re
+    
+    if not content or not content.strip():
+        return "", ""
+    
+    # Pattern to match code blocks: ```language\n...code...\n``` or ```language...code...```
+    # More flexible: matches with or without newline after opening fence
+    code_block_pattern = r"```(?:[a-zA-Z0-9]+)?\n?(.*?)```"
+    
+    # Extract all code blocks
+    code_blocks = re.findall(code_block_pattern, content, re.DOTALL)
+    code = "\n\n".join([block.strip() for block in code_blocks if block.strip()]).strip()
+    
+    # Remove code blocks from content to get text
+    # Use a more comprehensive pattern that includes the fences themselves
+    text = re.sub(r"```[a-zA-Z0-9]*\n?.*?```", "", content, flags=re.DOTALL).strip()
+    
+    # Clean up extra whitespace
+    text = re.sub(r"\n\s*\n+", "\n\n", text).strip()
+    
+    return code, text
+
+
 def spell_fix(input_text: str) -> str:
     replacements = {
         "strucutre": "structure",

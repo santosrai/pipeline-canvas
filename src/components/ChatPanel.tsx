@@ -2137,6 +2137,7 @@ try {
     try {
       const text = userMessage.content;
       let code = '';
+      let aiText = ''; // AI text response for better user experience
       let thinkingProcess: ExtendedMessage['thinkingProcess'] | undefined = undefined;
       let messageAlreadyUpdated = false; // Track if message was updated during streaming
       
@@ -2386,8 +2387,9 @@ try {
             if (placeholderMessageId && currentSession && currentSession.id === activeSessionId) {
               const finalThinkingProcess = convertThinkingData(finalResult.thinkingProcess, true);
               // Handle empty code case - preserve message with thinking process
+              // Use AI text response if available, otherwise fall back to generic message
               const defaultMessageContent = finalResult.code && finalResult.code.trim()
-                ? `Generated code for: "${text}". Executing...`
+                ? (finalResult.text || `Generated code for: "${text}". Executing...`)
                 : `I couldn't generate valid code for: "${text}". ${finalThinkingProcess ? 'See my thinking process above for details.' : ''}`;
               
               // Try to generate PDB summary asynchronously
@@ -2670,9 +2672,11 @@ try {
           return; // Exit early - no code generation or execution
         }
         code = response.data?.code || '';
+        // Extract AI text response for better user experience
+        aiText = response.data?.text || '';
         // Mark as complete since we have the full response
         thinkingProcess = convertThinkingData(response.data?.thinkingProcess, true);
-        console.log('[AI] route:code', { length: code?.length, hasThinking: !!thinkingProcess });
+        console.log('[AI] route:code', { length: code?.length, hasThinking: !!thinkingProcess, hasText: !!aiText });
       } catch (apiErr) {
         console.warn('AI generation failed (backend unavailable or error).', apiErr);
         const likelyVis = isLikelyVisualization(text);
@@ -2725,8 +2729,9 @@ try {
             : (currentSession.messages.find(m => m.id === placeholderMessageId) as ExtendedMessage)?.thinkingProcess;
           
           // Determine message content based on whether code is empty
+          // Use AI text response if available, otherwise fall back to generic message
           const defaultMessageContent = code && code.trim()
-            ? `Generated code for: "${text}". Executing...`
+            ? (aiText || `Generated code for: "${text}". Executing...`)
             : `I couldn't generate valid code for: "${text}". ${thinkingProcess ? 'See my thinking process above for details.' : ''}`;
           
           // Try to generate PDB summary asynchronously
@@ -2761,8 +2766,9 @@ try {
           );
           updateMessages(updatedMessages);
         } else {
+          // Use AI text response if available, otherwise fall back to generic message
           const defaultMessageContent = code && code.trim()
-            ? `Generated code for: "${text}". Executing...`
+            ? (aiText || `Generated code for: "${text}". Executing...`)
             : `I couldn't generate valid code for: "${text}".`;
           
           const aiResponse: ExtendedMessage = {

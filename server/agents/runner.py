@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, AsyncGenerator
 
 try:
-    from ..infrastructure.utils import log_line, get_text_from_completion, strip_code_fences, trim_history
+    from ..infrastructure.utils import log_line, get_text_from_completion, strip_code_fences, trim_history, extract_code_and_text
     from ..infrastructure.safety import violates_whitelist, ensure_clear_on_change
     from ..domain.protein.uniprot import search_uniprot
 except ImportError:
-    from infrastructure.utils import log_line, get_text_from_completion, strip_code_fences, trim_history
+    from infrastructure.utils import log_line, get_text_from_completion, strip_code_fences, trim_history, extract_code_and_text
     from infrastructure.safety import violates_whitelist, ensure_clear_on_change
     from domain.protein.uniprot import search_uniprot
 
@@ -987,7 +987,7 @@ async def run_agent(
             temperature=0.2,
         )
         content_text = get_text_from_completion(completion)
-        code = strip_code_fences(content_text)
+        code, explanation_text = extract_code_and_text(content_text)
         final_completion = completion  # Track which completion to use for thinking data
 
         # Safety pass
@@ -1008,15 +1008,19 @@ async def run_agent(
                 max_tokens=800,
                 temperature=0.2,
             )
-            code = strip_code_fences(get_text_from_completion(completion2))
+            content_text2 = get_text_from_completion(completion2)
+            code, explanation_text = extract_code_and_text(content_text2)
             final_completion = completion2  # Use the safety pass completion for thinking data
 
         code = ensure_clear_on_change(current_code, code)
-        log_line("agent:code:res", {"length": len(code)})
+        log_line("agent:code:res", {"length": len(code), "has_text": bool(explanation_text)})
         
         # Extract thinking data if available (from final completion)
         thinking_process = _parse_thinking_data(final_completion)
         result = {"type": "code", "code": code}
+        # Include text explanation if available
+        if explanation_text:
+            result["text"] = explanation_text
         if thinking_process:
             result["thinkingProcess"] = thinking_process
         return result
@@ -1541,7 +1545,7 @@ async def run_agent_stream(
                 "accumulated_content_preview": accumulated_content[:200] if accumulated_content else None
             })
             
-            code = strip_code_fences(accumulated_content)
+            code, explanation_text = extract_code_and_text(accumulated_content)
             
             # If no code found, log warning but still return result with thinking process
             if not code or not code.strip():
@@ -1568,6 +1572,9 @@ async def run_agent_stream(
                 "type": "code",
                 "code": code,
             }
+            # Include text explanation if available
+            if explanation_text:
+                final_result["text"] = explanation_text
             
             # Add thinking process if we have steps (even if code is empty)
             if thinking_steps:

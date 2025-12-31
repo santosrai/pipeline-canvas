@@ -63,10 +63,19 @@ class SimpleRouterGraph:
         pipeline_context = state.get("pipelineContext")
         has_pipeline_context = bool(pipeline_context)
         
+        low = input_text.lower().strip()
+        
+        # Early detection: empty or very short input
+        if not input_text.strip() or len(input_text.strip()) < 2:
+            return {"routedAgentId": "bio-chat", "reason": "rule:empty-input"}
+        
         interrogatives = [
             "what is this", "what's this", "what am i looking at", "this residue", "selected", "identify", "which residue", "these residues", "what are these",
+            # Chain-related questions
+            "what chains", "which chains", "how many chains", "what chain", "which chain", 
+            "tell me about the chains", "describe the chains", "what are the chains",
+            "chain information", "chain details", "tell me about chain", "describe chain"
         ]
-        low = input_text.lower().strip()
         
         # Visualization keywords when uploaded file is present
         visualization_keywords = [
@@ -101,6 +110,17 @@ class SimpleRouterGraph:
             is_question = any(q in low for q in ["what", "how", "describe", "explain", "tell", "show", "which"])
             if is_question and not has_viz_command:
                 return {"routedAgentId": "bio-chat", "reason": "rule:pipeline-context+question-like"}
+        
+        # Chain information questions (when structure is loaded) - route to bio-chat if not a visualization command
+        chain_question_keywords = [
+            "what chains", "which chains", "how many chains", "what chain",
+            "which chain", "tell me about chain", "describe chain", 
+            "chain information", "chain details", "what are the chains",
+            "tell me about the chains", "describe the chains"
+        ]
+        # Only route to bio-chat if it's a question AND not a visualization command
+        if any(k in low for k in chain_question_keywords) and not has_viz_command:
+            return {"routedAgentId": "bio-chat", "reason": "rule:chain-question"}
         
         # UniProt search rule
         if "uniprot" in low and ("search" in low or "find" in low):
@@ -256,7 +276,7 @@ class SimpleRouterGraph:
         scores.sort(key=lambda kv: kv[1], reverse=True)
 
         if not scores:
-            return {"routedAgentId": "code-builder", "reason": "default:no-scores"}
+            return {"routedAgentId": "bio-chat", "reason": "default:no-scores"}
 
         best_key, best_score = scores[0]
         second_score = scores[1][1] if len(scores) > 1 else -1.0
