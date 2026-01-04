@@ -6,7 +6,7 @@ import { useAuthStore } from '../stores/authStore';
 // Import CodeExecutor - will be lazy loaded in practice via code splitting
 // But keep synchronous import for now to avoid breaking existing code
 import { CodeExecutor } from '../utils/codeExecutor';
-import { api, fetchAgents, fetchModels, Agent, Model, streamAgentRoute } from '../utils/api';
+import { api, fetchAgents, fetchModels, Agent, Model, streamAgentRoute, getAuthHeaders } from '../utils/api';
 import { v4 as uuidv4 } from 'uuid';
 import { AlphaFoldDialog } from './AlphaFoldDialog';
 import { RFdiffusionDialog } from './RFdiffusionDialog';
@@ -96,6 +96,47 @@ const renderProteinMPNNResult = (result: ExtendedMessage['proteinmpnnResult']) =
     }
   };
 
+  const handleDownload = async (url: string, filename: string) => {
+    try {
+      // Determine if this is a JSON response or a file download
+      const isJson = url.includes('fmt=json');
+      
+      if (isJson) {
+        // For JSON, get the data and create a JSON file
+        const response = await api.get(url);
+        const jsonStr = JSON.stringify(response.data, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+      } else {
+        // For file downloads (FASTA, raw), use blob response
+        const response = await api.get(url, {
+          responseType: 'blob',
+        });
+        
+        // Create a blob URL and trigger download
+        const blob = new Blob([response.data]);
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+      }
+    } catch (error: any) {
+      console.error('Download failed:', error);
+      alert(`Failed to download: ${error?.response?.data?.detail || error?.message || 'Unknown error'}`);
+    }
+  };
+
   return (
     <div className="mt-3 p-4 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-lg">
       <div className="flex items-center space-x-2 mb-3">
@@ -111,34 +152,28 @@ const renderProteinMPNNResult = (result: ExtendedMessage['proteinmpnnResult']) =
       </div>
 
       <div className="flex flex-wrap gap-2 mb-3">
-        <a
-          href={result.downloads.json}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center space-x-1 px-3 py-1 text-xs bg-emerald-100 text-emerald-700 rounded-full hover:bg-emerald-200"
+        <button
+          onClick={() => handleDownload(result.downloads.json, `proteinmpnn_${result.jobId}.json`)}
+          className="inline-flex items-center space-x-1 px-3 py-1 text-xs bg-emerald-100 text-emerald-700 rounded-full hover:bg-emerald-200 cursor-pointer"
         >
           <Download className="w-3 h-3" />
           <span>JSON</span>
-        </a>
-        <a
-          href={result.downloads.fasta}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center space-x-1 px-3 py-1 text-xs bg-emerald-100 text-emerald-700 rounded-full hover:bg-emerald-200"
+        </button>
+        <button
+          onClick={() => handleDownload(result.downloads.fasta, `proteinmpnn_${result.jobId}.fasta`)}
+          className="inline-flex items-center space-x-1 px-3 py-1 text-xs bg-emerald-100 text-emerald-700 rounded-full hover:bg-emerald-200 cursor-pointer"
         >
           <Download className="w-3 h-3" />
           <span>FASTA</span>
-        </a>
+        </button>
         {result.downloads.raw && (
-          <a
-            href={result.downloads.raw}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center space-x-1 px-3 py-1 text-xs bg-emerald-100 text-emerald-700 rounded-full hover:bg-emerald-200"
+          <button
+            onClick={() => handleDownload(result.downloads.raw!, `proteinmpnn_${result.jobId}_raw.json`)}
+            className="inline-flex items-center space-x-1 px-3 py-1 text-xs bg-emerald-100 text-emerald-700 rounded-full hover:bg-emerald-200 cursor-pointer"
           >
             <Download className="w-3 h-3" />
             <span>Raw data</span>
-          </a>
+          </button>
         )}
       </div>
 
@@ -205,9 +240,60 @@ const convertThinkingData = (thinkingProcess: any, isComplete: boolean = false):
 const extractProteinMPNNSequences = (payload: any): string[] => {
   if (!payload) return [];
 
+  const parseMfasta = (mfasta: string): string[] => {
+    const sequences: string[] = [];
+    let currentSeq: string[] = [];
+    let isInputSequence = false;
+    
+    for (const line of mfasta.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('>')) {
+        // Save previous sequence if we have one (skip input sequence)
+        if (currentSeq.length > 0 && !isInputSequence) {
+          const seq = currentSeq.join('');
+          // Remove chain separators (/) and extract just the sequence
+          const cleanSeq = seq.split('/')[0];
+          // Validate it's a protein sequence
+          if (cleanSeq && /^[ACDEFGHIKLMNPQRSTVWY]+$/i.test(cleanSeq)) {
+            sequences.push(cleanSeq);
+          }
+        }
+        currentSeq = [];
+        isInputSequence = trimmed.startsWith('>input');
+      } else if (trimmed) {
+        // Accumulate sequence lines
+        currentSeq.push(trimmed);
+      }
+    }
+    
+    // Handle last sequence
+    if (currentSeq.length > 0 && !isInputSequence) {
+      const seq = currentSeq.join('');
+      const cleanSeq = seq.split('/')[0];
+      if (cleanSeq && /^[ACDEFGHIKLMNPQRSTVWY]+$/i.test(cleanSeq)) {
+        sequences.push(cleanSeq);
+      }
+    }
+    
+    return sequences;
+  };
+
   const search = (data: any): string[] => {
     if (!data) return [];
-    const candidates: string[] = [];
+    
+    // First check for mfasta field (NVIDIA API format)
+    if (data.mfasta && typeof data.mfasta === 'string') {
+      const parsed = parseMfasta(data.mfasta);
+      if (parsed.length > 0) {
+        return parsed;
+      }
+    }
+    
+    // Check for pre-extracted sequences array
+    if (Array.isArray(data.sequences)) {
+      return data.sequences.filter((item: unknown) => typeof item === 'string');
+    }
+    
     const possibleFields = ['designed_sequences', 'designed_seqs', 'sequences', 'output_sequences'];
 
     for (const field of possibleFields) {
@@ -230,7 +316,7 @@ const extractProteinMPNNSequences = (payload: any): string[] => {
       }
     }
 
-    return candidates;
+    return [];
   };
 
   return search(payload);
@@ -500,7 +586,11 @@ export const ChatPanel: React.FC = () => {
     // Check if messages have canvas data that we should restore
     const lastAiMessage = activeSession.messages
       .filter(m => m.type === 'ai' && m.threeDCanvas?.sceneData)
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
+      .sort((a, b) => {
+        const aTime = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+        const bTime = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+        return bTime - aTime;
+      })[0];
     
     if (lastAiMessage?.threeDCanvas?.sceneData) {
       const canvasCode = lastAiMessage.threeDCanvas.sceneData;
@@ -946,7 +1036,8 @@ export const ChatPanel: React.FC = () => {
       const executor = new CodeExecutor(plugin);
       
       // Fetch file content and create blob URL (like AlphaFold does)
-      const fileResponse = await fetch(fileInfo.file_url);
+      const headers = getAuthHeaders();
+      const fileResponse = await fetch(fileInfo.file_url, { headers });
       if (!fileResponse.ok) {
         throw new Error('Failed to fetch uploaded file');
       }
@@ -987,7 +1078,11 @@ try {
         const currentSession = getActiveSession();
         const lastAiMessage = currentSession?.messages
           .filter(m => m.type === 'ai')
-          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
+          .sort((a, b) => {
+            const aTime = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+            const bTime = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+            return bTime - aTime;
+          })[0];
         
         const messageId = lastAiMessage?.id;
         if (messageId) {
@@ -2167,8 +2262,12 @@ try {
           formData.append('session_id', activeSessionId);
         }
 
+        // Get auth headers for the request
+        const headers = getAuthHeaders();
+
         const response = await fetch('/api/upload/pdb', {
           method: 'POST',
+          headers,
           body: formData,
         });
 
@@ -2194,6 +2293,9 @@ try {
         // Clear pending file after successful upload
         setPendingFile(null);
         
+        // Dispatch event to notify file browser to refresh
+        window.dispatchEvent(new CustomEvent('session-file-added'));
+        
         // Clear previous PDB context when new file is uploaded
         setCurrentCode('');
         setCurrentStructureOrigin(null);
@@ -2209,7 +2311,8 @@ try {
             
             // Fetch file content and create blob URL (like AlphaFold does)
             const fileUrl = result.file_info.file_url || `/api/upload/pdb/${result.file_info.file_id}`;
-            const fileResponse = await fetch(fileUrl);
+            const headers = getAuthHeaders();
+            const fileResponse = await fetch(fileUrl, { headers });
             if (!fileResponse.ok) {
               throw new Error('Failed to fetch uploaded file');
             }
@@ -2245,7 +2348,11 @@ try {
               const currentSession = getActiveSession();
               const lastAiMessage = currentSession?.messages
                 .filter(m => m.type === 'ai')
-                .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
+                .sort((a, b) => {
+                  const aTime = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+                  const bTime = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+                  return bTime - aTime;
+                })[0];
               
               if (lastAiMessage?.id) {
                 saveVisualizationCode(activeSessionId, loadCode, lastAiMessage.id);
@@ -3067,9 +3174,9 @@ try {
 
   return (
     <>
-    <div className="h-full flex flex-col" data-testid="chat-panel" data-chat-ready="true">
+    <div className="h-full flex flex-col min-h-0 overflow-hidden" data-testid="chat-panel" data-chat-ready="true">
       {!showCenteredLayout && (
-        <div className="px-4 py-2 border-b border-gray-200">
+        <div className="px-2 sm:px-4 py-2 border-b border-gray-200">
           <div className="flex items-center space-x-2">
             <Sparkles className="w-4 h-4 text-blue-600" />
             <div>
@@ -3085,14 +3192,14 @@ try {
       )}
 
       {!showCenteredLayout ? (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto min-h-0 p-2 sm:p-4 space-y-4" style={{ WebkitOverflowScrolling: 'touch' }}>
           {messages.map((message) => (
           <div
             key={message.id}
             className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[80%] p-3 rounded-lg ${
+              className={`max-w-[85%] sm:max-w-[80%] p-2 sm:p-3 rounded-lg ${
                 message.type === 'user'
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-900'
@@ -3240,13 +3347,13 @@ try {
       ) : (
         // Centered welcome screen when no messages
         <div className="flex-1 flex flex-col items-center justify-center px-4">
-          <h1 className="text-3xl font-bold text-gray-900 mb-8 text-center">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6 sm:mb-8 text-center">
             What can I do for you?
           </h1>
         </div>
       )}
 
-      <div className={`px-4 py-2 ${!showCenteredLayout ? 'border-t border-gray-200' : ''}`}>
+      <div className={`px-2 sm:px-4 py-1.5 sm:py-2 ${!showCenteredLayout ? 'border-t border-gray-200' : ''}`}>
         {/* Multiple selection chips */}
         {selections.length > 0 && (
           <div className="mb-3">
@@ -3305,10 +3412,10 @@ try {
         />
 
         {!showCenteredLayout && (
-          <div className="mb-2">
+          <div className="mb-1 sm:mb-2">
             <button
               onClick={() => setIsQuickStartExpanded(!isQuickStartExpanded)}
-              className="flex items-center gap-1 text-xs text-gray-500 mb-1 hover:text-gray-700 transition-colors"
+              className="flex items-center gap-1 text-xs text-gray-500 mb-0.5 sm:mb-1 hover:text-gray-700 transition-colors"
             >
               Quick start:
               {isQuickStartExpanded ? (
@@ -3318,7 +3425,7 @@ try {
               )}
             </button>
             {isQuickStartExpanded && (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1 sm:gap-1.5">
                 {quickPrompts.map((prompt, index) => (
                   <button
                     key={index}
@@ -3333,7 +3440,7 @@ try {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className={`flex flex-col gap-2 ${showCenteredLayout ? 'max-w-2xl w-full mx-auto' : ''}`}>
+        <form onSubmit={handleSubmit} className={`flex flex-col gap-1.5 sm:gap-2 ${showCenteredLayout ? 'max-w-2xl w-full mx-auto' : ''}`}>
           {/* Show uploaded file capsule at top of input area */}
           {pendingFile && (
             <div className="flex items-center space-x-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
@@ -3370,8 +3477,8 @@ try {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={"Chat, visualize, or build..."}
-              className={`w-full px-3 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm placeholder-gray-400 resize-none ${
-                showCenteredLayout ? 'min-h-[120px] text-base pb-12' : 'min-h-[60px] pb-12'
+              className={`w-full px-2 sm:px-3 py-1.5 sm:py-2 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm placeholder-gray-400 resize-none ${
+                showCenteredLayout ? 'min-h-[120px] text-base pb-12' : 'min-h-[48px] sm:min-h-[60px] pb-10 sm:pb-12'
               }`}
               rows={showCenteredLayout ? 4 : 2}
               disabled={isLoading}
@@ -3384,8 +3491,8 @@ try {
             />
             
             {/* Bottom row: Agent, Model selectors, Microphone, and Send button - positioned inside textarea */}
-            <div className="absolute bottom-2 left-3 right-3 flex items-center gap-2 pointer-events-none">
-              <div className="flex items-center gap-2 pointer-events-auto min-w-0" style={{ flexShrink: 1 }}>
+            <div className="absolute bottom-1.5 sm:bottom-2 left-1.5 sm:left-3 right-1.5 sm:right-3 flex items-center gap-1 sm:gap-2 pointer-events-none">
+              <div className="hidden sm:flex items-center gap-2 pointer-events-auto min-w-0" style={{ flexShrink: 1 }}>
                 {/* Agent Selector */}
                 {agents.length > 0 && (
                   <AgentSelector
@@ -3402,7 +3509,7 @@ try {
               {/* Spacer */}
               <div className="flex-1" />
               
-              <div className="flex items-center gap-2 pointer-events-auto">
+              <div className="flex items-center gap-1 sm:gap-2 pointer-events-auto">
                 {/* Attachment menu button */}
                 <AttachmentMenu
                   onFileSelected={(file) => {
@@ -3425,10 +3532,10 @@ try {
                   }}
                 />
                 
-                {/* Microphone button */}
+                {/* Microphone button - hidden on mobile */}
                 <button
                   type="button"
-                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                  className="hidden sm:block p-2 text-gray-400 hover:text-gray-600 transition-colors"
                   title="Voice input"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3443,11 +3550,11 @@ try {
                   className={`flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     showCenteredLayout 
                       ? 'p-2 text-gray-400 hover:text-gray-600' 
-                      : 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700'
+                      : 'px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700'
                   }`}
                   title="Send"
                 >
-                  <Send className="w-5 h-5" />
+                  <Send className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
             </div>

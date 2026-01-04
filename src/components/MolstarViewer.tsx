@@ -32,7 +32,11 @@ export const MolstarViewer: React.FC = () => {
       const activeSession = getActiveSession();
       const lastAiMessageWithCode = activeSession?.messages
         .filter(m => m.type === 'ai' && m.threeDCanvas?.sceneData)
-        .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
+        .sort((a, b) => {
+          const aTime = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+          const bTime = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+          return bTime - aTime;
+        })[0];
       
       if (lastAiMessageWithCode?.threeDCanvas?.sceneData) {
         return lastAiMessageWithCode.threeDCanvas.sceneData;

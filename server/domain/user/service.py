@@ -67,7 +67,8 @@ def authenticate_user(login_data: UserLogin) -> Dict[str, Any]:
         if not user or not verify_password(login_data.password, user["password_hash"]):
             raise ValueError("Invalid email or password")
         
-        if not user["is_active"]:
+        # SQLite stores booleans as integers (0/1), so check explicitly
+        if user["is_active"] not in (1, True):
             raise ValueError("Account is deactivated")
         
         # Update last login

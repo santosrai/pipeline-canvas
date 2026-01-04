@@ -158,10 +158,10 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
             type="button"
             onClick={handleButtonClick}
             disabled={disabled}
-            className="flex items-center justify-center w-8 h-8 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center justify-center w-5 h-5 sm:w-8 sm:h-8 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-colors box-border flex-shrink-0 p-0"
             title="Add attachment"
           >
-            <Plus className="w-4 h-4 text-gray-600" />
+            <Plus className="w-2.5 h-2.5 sm:w-4 sm:h-4 text-gray-600 flex-shrink-0" />
           </button>
 
           {/* Dropdown menu */}

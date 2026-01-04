@@ -99,6 +99,36 @@ export function setApiBaseUrl(url: string) {
   api.defaults.baseURL = url;
 }
 
+/**
+ * Get the current authentication token from localStorage.
+ * This is useful for fetch() calls that need to include the Authorization header.
+ */
+export function getAuthToken(): string | null {
+  try {
+    const authStorage = localStorage.getItem('novoprotein-auth-storage');
+    if (authStorage) {
+      const { state } = JSON.parse(authStorage);
+      return state?.accessToken || null;
+    }
+  } catch (e) {
+    console.warn('Failed to read auth token from storage', e);
+  }
+  return null;
+}
+
+/**
+ * Get headers for authenticated fetch requests.
+ * Includes Authorization header if token is available.
+ */
+export function getAuthHeaders(): Record<string, string> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 export interface Model {
   id: string;
   name: string;

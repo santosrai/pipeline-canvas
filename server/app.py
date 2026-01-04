@@ -3,7 +3,7 @@ import os
 import traceback
 import time
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -57,7 +57,8 @@ try:
     from .agents.handlers.proteinmpnn import proteinmpnn_handler
     from .domain.storage.pdb_storage import save_uploaded_pdb, get_uploaded_pdb
     from .domain.storage.session_tracker import associate_file_with_session, get_session_files
-    from .database.db import init_db
+    from .domain.storage.file_access import list_user_files, verify_file_ownership, get_file_metadata
+    from .database.db import init_db, get_db
     from .api.routes import auth, credits, reports, admin, pipelines, chat_sessions, chat_messages, three_d_canvases, attachments
     from .api.middleware.auth import get_current_user
     from .api.middleware.credits import check_credits
@@ -77,9 +78,10 @@ except ImportError:
     from agents.handlers.proteinmpnn import proteinmpnn_handler
     from domain.storage.pdb_storage import save_uploaded_pdb, get_uploaded_pdb
     from domain.storage.session_tracker import associate_file_with_session, get_session_files, remove_file_from_session
-    from database.db import init_db
+    from domain.storage.file_access import list_user_files, verify_file_ownership, get_file_metadata
+    from database.db import init_db, get_db
     from api.routes import auth, credits, reports, admin, pipelines, chat_sessions, chat_messages, three_d_canvases, attachments
-    from api.middleware.auth import get_current_user
+    from api.middleware.auth import get_current_user, get_current_user_optional
     from api.middleware.credits import check_credits
     from domain.credits.service import deduct_credits, log_usage, CREDIT_COSTS, get_user_credits
 
@@ -604,7 +606,11 @@ async def alphafold_fold(request: Request, user: Dict[str, Any] = Depends(get_cu
 async def alphafold_status(request: Request, job_id: str):
     try:
         status = alphafold_handler.get_job_status(job_id)
+        if status.get("status") == "not_found":
+            raise HTTPException(status_code=404, detail="AlphaFold job not found")
         return status
+    except HTTPException:
+        raise
     except Exception as e:
         log_line("alphafold_status_failed", {"error": str(e), "trace": traceback.format_exc()})
         content = {"error": "alphafold_status_failed"}
@@ -618,7 +624,11 @@ async def alphafold_status(request: Request, job_id: str):
 async def alphafold_cancel(request: Request, job_id: str):
     try:
         result = alphafold_handler.cancel_job(job_id)
+        if result.get("status") == "not_found":
+            raise HTTPException(status_code=404, detail="AlphaFold job not found")
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         log_line("alphafold_cancel_failed", {"error": str(e), "trace": traceback.format_exc()})
         content = {"error": "alphafold_cancel_failed"}
@@ -708,6 +718,100 @@ async def download_uploaded_pdb(request: Request, file_id: str, user: Dict[str, 
     )
 
 
+# User file management endpoints -----------------------------------------
+
+
+@app.get("/api/files")
+@limiter.limit("30/minute")
+async def get_user_files_endpoint(request: Request, user: Dict[str, Any] = Depends(get_current_user)):
+    """List all files for the current user. Files are already user-scoped in the database."""
+    _ = request
+    try:
+        log_line("user_files_request", {"user_id": user["id"]})
+        base_dir = Path(__file__).parent
+        all_files = []
+        
+        # Get all user files (already filtered by user_id in list_user_files)
+        user_files = list_user_files(user["id"])
+        log_line("user_files_raw", {"user_id": user["id"], "count": len(user_files)})
+        
+        for file_entry in user_files:
+            file_type = file_entry.get("file_type", "")
+            file_id = file_entry.get("id", "")
+            stored_path_str = file_entry.get("stored_path", "")
+            filename = file_entry.get("original_filename", f"{file_id}")
+            
+            log_line("processing_file", {
+                "file_id": file_id,
+                "file_type": file_type,
+                "stored_path": stored_path_str,
+                "filename": filename
+            })
+            
+            if stored_path_str:
+                file_path = base_dir / stored_path_str
+                file_exists = file_path.exists()
+                log_line("file_path_check", {
+                    "file_id": file_id,
+                    "stored_path": stored_path_str,
+                    "absolute_path": str(file_path),
+                    "exists": file_exists
+                })
+                
+                if file_exists:
+                    # Determine download URL based on file type
+                    if file_type == "upload":
+                        download_url = f"/api/upload/pdb/{file_id}"
+                    elif file_type == "proteinmpnn":
+                        download_url = f"/api/proteinmpnn/result/{file_id}"
+                    else:
+                        # For other types, use generic download endpoint
+                        download_url = f"/api/files/{file_id}/download"
+                    
+                    # Parse metadata if it's a JSON string
+                    metadata = file_entry.get("metadata", {})
+                    if isinstance(metadata, str):
+                        try:
+                            metadata = json.loads(metadata)
+                        except json.JSONDecodeError:
+                            metadata = {}
+                    
+                    file_size = file_entry.get("size", 0)
+                    if file_size == 0:
+                        try:
+                            file_size = file_path.stat().st_size
+                        except OSError:
+                            file_size = 0
+                    
+                    all_files.append({
+                        "file_id": file_id,
+                        "type": file_type,
+                        "filename": filename,
+                        "file_path": stored_path_str,
+                        "size": file_size,
+                        "download_url": download_url,
+                        "metadata": metadata,
+                    })
+                else:
+                    log_line("file_not_found", {
+                        "file_id": file_id,
+                        "expected_path": str(file_path)
+                    })
+        
+        log_line("user_files_loaded", {"user_id": user["id"], "file_count": len(all_files)})
+        
+        return {
+            "status": "success",
+            "files": all_files,
+        }
+    except Exception as e:
+        log_line("user_files_list_failed", {"error": str(e), "trace": traceback.format_exc(), "user_id": user["id"]})
+        content = {"error": "Failed to list user files"}
+        if DEBUG_API:
+            content["detail"] = str(e)
+        return JSONResponse(status_code=500, content=content)
+
+
 # Session file management endpoints -----------------------------------------
 
 
@@ -763,6 +867,47 @@ async def get_session_files_endpoint(request: Request, session_id: str, user: Di
     except Exception as e:
         log_line("session_files_list_failed", {"error": str(e), "trace": traceback.format_exc(), "session_id": session_id})
         content = {"error": "Failed to list session files"}
+        if DEBUG_API:
+            content["detail"] = str(e)
+        return JSONResponse(status_code=500, content=content)
+
+
+@app.delete("/api/files/{file_id}")
+@limiter.limit("10/minute")
+async def delete_user_file(request: Request, file_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+    """Delete a user file. Verifies ownership."""
+    _ = request
+    try:
+        # Verify ownership
+        if not verify_file_ownership(file_id, user["id"]):
+            raise HTTPException(status_code=403, detail="File not found or access denied")
+        
+        # Get file metadata
+        file_metadata = get_file_metadata(file_id, user["id"])
+        if not file_metadata:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        base_dir = Path(__file__).parent
+        stored_path = file_metadata.get("stored_path")
+        
+        if stored_path:
+            file_path = base_dir / stored_path
+            if file_path.exists():
+                file_path.unlink()
+                log_line("file_deleted", {"file_id": file_id, "user_id": user["id"], "path": str(file_path)})
+        
+        # Delete from database
+        with get_db() as conn:
+            conn.execute("DELETE FROM user_files WHERE id = ? AND user_id = ?", (file_id, user["id"]))
+            # Also remove from session_files associations
+            conn.execute("DELETE FROM session_files WHERE file_id = ? AND user_id = ?", (file_id, user["id"]))
+        
+        return {"status": "success", "message": "File deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_line("file_delete_failed", {"error": str(e), "trace": traceback.format_exc(), "file_id": file_id, "user_id": user["id"]})
+        content = {"error": "Failed to delete file"}
         if DEBUG_API:
             content["detail"] = str(e)
         return JSONResponse(status_code=500, content=content)
@@ -917,10 +1062,10 @@ async def download_session_file(request: Request, session_id: str, file_id: str,
 
 @app.get("/api/proteinmpnn/sources")
 @limiter.limit("30/minute")
-async def proteinmpnn_sources(request: Request):
+async def proteinmpnn_sources(request: Request, user: Dict[str, Any] = Depends(get_current_user)):
     _ = request
     try:
-        sources = proteinmpnn_handler.list_available_sources()
+        sources = proteinmpnn_handler.list_available_sources(user_id=user.get("id"))
         return {"status": "success", "sources": sources}
     except Exception as e:
         log_line("proteinmpnn_sources_failed", {"error": str(e), "trace": traceback.format_exc()})
@@ -1023,7 +1168,11 @@ async def proteinmpnn_design(request: Request, user: Dict[str, Any] = Depends(ge
 async def proteinmpnn_status(request: Request, job_id: str):
     try:
         status = proteinmpnn_handler.get_job_status(job_id)
+        if status.get("status") == "not_found":
+            raise HTTPException(status_code=404, detail="ProteinMPNN job not found")
         return status
+    except HTTPException:
+        raise
     except Exception as e:
         log_line("proteinmpnn_status_failed", {"error": str(e), "trace": traceback.format_exc()})
         content = {"error": "proteinmpnn_status_failed"}
@@ -1034,31 +1183,56 @@ async def proteinmpnn_status(request: Request, job_id: str):
 
 @app.get("/api/proteinmpnn/result/{job_id}")
 @limiter.limit("30/minute")
-async def proteinmpnn_result(request: Request, job_id: str, fmt: str = "json", user: Dict[str, Any] = Depends(get_current_user)):
+async def proteinmpnn_result(
+    request: Request, 
+    job_id: str, 
+    fmt: str = "json", 
+    user: Dict[str, Any] = Depends(get_current_user)
+):
     try:
-        result = proteinmpnn_handler.get_job_result(job_id, user["id"])
+        user_id = user.get("id")
+        log_line("proteinmpnn_result_request", {"job_id": job_id, "user_id": user_id, "fmt": fmt})
+        result = proteinmpnn_handler.get_job_result(job_id, user_id)
         if not result:
+            log_line("proteinmpnn_result_not_found", {"job_id": job_id, "user_id": user_id})
             raise HTTPException(status_code=404, detail="ProteinMPNN result not found")
 
         if fmt == "json":
             return result
+        
+        # For FASTA and raw formats, search in multiple locations (same logic as get_job_result)
+        base_dir = Path(__file__).parent
+        search_paths = []
+        
+        if user.get("id"):
+            search_paths.append(base_dir / "storage" / user["id"] / "proteinmpnn_results" / job_id)
+        
+        # Always check system directory as fallback
+        search_paths.append(base_dir / "storage" / "system" / "proteinmpnn_results" / job_id)
+        
+        # Old location for backward compatibility
+        search_paths.append(base_dir / "proteinmpnn_results" / job_id)
+        
         if fmt == "fasta":
-            fasta_path = proteinmpnn_handler.results_dir / job_id / "designed_sequences.fasta"
-            if not fasta_path.exists():
-                raise HTTPException(status_code=404, detail="FASTA output not available")
-            return FileResponse(
-                fasta_path,
-                media_type="text/plain",
-                filename=f"proteinmpnn_{job_id}.fasta",
-            )
+            for result_dir in search_paths:
+                fasta_path = result_dir / "designed_sequences.fasta"
+                if fasta_path.exists():
+                    return FileResponse(
+                        fasta_path,
+                        media_type="text/plain",
+                        filename=f"proteinmpnn_{job_id}.fasta",
+                    )
+            raise HTTPException(status_code=404, detail="FASTA output not available")
+        
         if fmt == "raw":
-            raw_path = proteinmpnn_handler.results_dir / job_id / "raw_data.json"
-            if raw_path.exists():
-                return FileResponse(
-                    raw_path,
-                    media_type="application/json",
-                    filename=f"proteinmpnn_{job_id}_raw.json",
-                )
+            for result_dir in search_paths:
+                raw_path = result_dir / "raw_data.json"
+                if raw_path.exists():
+                    return FileResponse(
+                        raw_path,
+                        media_type="application/json",
+                        filename=f"proteinmpnn_{job_id}_raw.json",
+                    )
             raise HTTPException(status_code=404, detail="Raw output not available")
 
         raise HTTPException(status_code=400, detail="Unsupported format requested")
@@ -1183,7 +1357,11 @@ async def rfdiffusion_design(request: Request, user: Dict[str, Any] = Depends(ge
 async def rfdiffusion_status(request: Request, job_id: str):
     try:
         status = rfdiffusion_handler.get_job_status(job_id)
+        if status.get("status") == "not_found":
+            raise HTTPException(status_code=404, detail="RFdiffusion job not found")
         return status
+    except HTTPException:
+        raise
     except Exception as e:
         log_line("rfdiffusion_status_failed", {"error": str(e), "trace": traceback.format_exc()})
         content = {"error": "rfdiffusion_status_failed"}
@@ -1197,7 +1375,11 @@ async def rfdiffusion_status(request: Request, job_id: str):
 async def rfdiffusion_cancel(request: Request, job_id: str):
     try:
         result = rfdiffusion_handler.cancel_job(job_id)
+        if result.get("status") == "not_found":
+            raise HTTPException(status_code=404, detail="RFdiffusion job not found")
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         log_line("rfdiffusion_cancel_failed", {"error": str(e), "trace": traceback.format_exc()})
         content = {"error": "rfdiffusion_cancel_failed"}

@@ -212,8 +212,12 @@ export const NodeParameterConfig: React.FC<NodeParameterConfigProps> = ({
         formData.append('session_id', activeSessionId);
       }
 
+      // Get auth headers for the request
+      const headers = getAuthHeaders();
+
       const response = await fetch('/api/upload/pdb', {
         method: 'POST',
+        headers,
         body: formData,
       });
 

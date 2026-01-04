@@ -93,51 +93,56 @@ function App() {
     <div className="h-screen flex flex-col bg-gray-50" data-testid="app-container" data-app-ready="true">
       <Header />
       
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Chat History Sidebar */}
         <ChatHistorySidebar />
         
         {/* Chat Panel - Resizable when viewer visible, full width when hidden */}
         {isViewerVisible ? (
-          <ResizablePanel
-            defaultWidth={chatPanelWidth}
-            minWidth={280}
-            maxWidth={800}
-            position="left"
-            onWidthChange={setChatPanelWidth}
-            className="bg-white"
-          >
-            <ChatPanel />
-          </ResizablePanel>
+          <>
+            {/* Desktop: Resizable panel */}
+            <ResizablePanel
+              defaultWidth={chatPanelWidth}
+              minWidth={280}
+              maxWidth={800}
+              position="left"
+              onWidthChange={setChatPanelWidth}
+              className="bg-white hidden md:block"
+            >
+              <ChatPanel />
+            </ResizablePanel>
+            {/* Mobile: Hide chat when viewer is visible (user can toggle viewer off to see chat) */}
+          </>
         ) : (
-          <div className="flex-1 bg-white">
+          <div className="flex-1 bg-white flex flex-col min-h-0 overflow-hidden">
             <ChatPanel />
           </div>
         )}
         
         {/* Right Panel - Toolbar + Pane (only shown when viewer is visible) */}
         {isViewerVisible && (
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-w-0">
             {/* Toolbar */}
-            <div className="h-10 flex items-center justify-between px-3 border-b border-gray-200 bg-white">
+            <div className="h-auto sm:h-10 flex flex-col sm:flex-row items-stretch sm:items-center justify-between px-2 sm:px-3 py-2 sm:py-0 border-b border-gray-200 bg-white">
               {/* Editor disabled message */}
               {!settings.codeEditor.enabled && (
-                <div className="text-xs text-gray-500 flex items-center space-x-2">
+                <div className="hidden sm:flex text-xs text-gray-500 items-center space-x-2 mb-2 sm:mb-0">
                   <Settings className="w-3 h-3" />
                   <span>Code editor hidden - enable in Settings</span>
                 </div>
               )}
               
-              <div className="inline-flex rounded-full overflow-hidden ml-auto border border-gray-300">
+              <div className="inline-flex rounded-full overflow-hidden ml-auto border border-gray-300 w-full sm:w-auto justify-center sm:justify-end">
                 <button
                   onClick={() => {
                     setSelectedFile(null);
                     setActivePane('viewer');
                   }}
-                  className={`px-3 h-8 flex items-center gap-1 text-xs ${activePane === 'viewer' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  className={`flex-1 sm:flex-none px-2 sm:px-3 h-8 flex items-center justify-center gap-1 text-xs ${activePane === 'viewer' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                   title="Show viewer"
                 >
                   <Eye className="w-4 h-4" />
+                  <span className="sm:hidden">Viewer</span>
                 </button>
                 {settings.codeEditor.enabled && (
                   <button
@@ -145,10 +150,11 @@ function App() {
                       setSelectedFile(null);
                       setActivePane('editor');
                     }}
-                    className={`px-3 h-8 flex items-center gap-1 text-xs ${activePane === 'editor' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                    className={`flex-1 sm:flex-none px-2 sm:px-3 h-8 flex items-center justify-center gap-1 text-xs ${activePane === 'editor' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                     title="Show editor"
                   >
                     <Code2 className="w-4 h-4" />
+                    <span className="sm:hidden">Editor</span>
                   </button>
                 )}
                 <button
@@ -160,26 +166,28 @@ function App() {
                       setActivePane('files');
                     }
                   }}
-                  className={`px-3 h-8 flex items-center gap-1 text-xs ${activePane === 'files' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  className={`flex-1 sm:flex-none px-2 sm:px-3 h-8 flex items-center justify-center gap-1 text-xs ${activePane === 'files' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                   title="Show file browser"
                 >
                   <FolderOpen className="w-4 h-4" />
+                  <span className="sm:hidden">Files</span>
                 </button>
                 <button
                   onClick={() => {
                     setSelectedFile(null);
                     setActivePane('pipeline');
                   }}
-                  className={`px-3 h-8 flex items-center gap-1 text-xs ${activePane === 'pipeline' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  className={`flex-1 sm:flex-none px-2 sm:px-3 h-8 flex items-center justify-center gap-1 text-xs ${activePane === 'pipeline' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                   title="Show pipeline canvas"
                 >
                   <Workflow className="w-4 h-4" />
+                  <span className="sm:hidden">Pipeline</span>
                 </button>
                 <a
                   href="/pipeline"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-2 h-8 flex items-center gap-1 text-xs bg-white text-gray-700 hover:bg-gray-50 border-l border-gray-300"
+                  className="hidden sm:flex px-2 h-8 items-center gap-1 text-xs bg-white text-gray-700 hover:bg-gray-50 border-l border-gray-300"
                   title="Open pipeline canvas in full screen"
                 >
                   <Workflow className="w-3 h-3" />

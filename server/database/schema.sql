@@ -266,3 +266,33 @@ CREATE TABLE IF NOT EXISTS attachments (
 CREATE INDEX idx_attachments_message_id ON attachments(message_id);
 CREATE INDEX idx_attachments_file_id ON attachments(file_id);
 
+-- Admin audit log table
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+    id TEXT PRIMARY KEY,
+    admin_id TEXT NOT NULL,
+    action_type TEXT NOT NULL, -- 'view_user', 'export_data', 'revoke_token', etc.
+    target_type TEXT, -- 'user', 'message', 'token'
+    target_id TEXT,
+    details TEXT, -- JSON: request params, filters, etc.
+    ip_address TEXT,
+    user_agent TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_id) REFERENCES users(id)
+);
+
+CREATE INDEX idx_admin_audit_admin_id ON admin_audit_log(admin_id);
+CREATE INDEX idx_admin_audit_action_type ON admin_audit_log(action_type);
+CREATE INDEX idx_admin_audit_created_at ON admin_audit_log(created_at);
+
+-- Admin preferences table
+CREATE TABLE IF NOT EXISTS admin_preferences (
+    admin_id TEXT PRIMARY KEY,
+    privacy_mode BOOLEAN DEFAULT 0,
+    masked_fields TEXT, -- JSON array of field names to mask
+    default_page_size INTEGER DEFAULT 25,
+    preferred_view TEXT, -- 'table'|'thread'|'both'
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (admin_id) REFERENCES users(id)
+);
+

@@ -42,7 +42,11 @@ export const CodeEditor: React.FC = () => {
         const activeSession = chatStore.sessions.find(s => s.id === activeSessionId);
         const lastAiMessage = activeSession?.messages
           .filter(m => m.type === 'ai')
-          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
+          .sort((a, b) => {
+            const aTime = a.timestamp instanceof Date ? a.timestamp.getTime() : new Date(a.timestamp).getTime();
+            const bTime = b.timestamp instanceof Date ? b.timestamp.getTime() : new Date(b.timestamp).getTime();
+            return bTime - aTime;
+          })[0];
         
         if (lastAiMessage?.id) {
           saveVisualizationCode(activeSessionId, currentCode, lastAiMessage.id);

@@ -54,6 +54,54 @@ ReactDOM.createRoot(rootElement).render(
               </AuthGuard>
             }
           />
+          <Route
+            path="/admin/users/:userId"
+            element={
+              <AuthGuard requireRole="admin">
+                <AdminDashboard />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/admin/users/:userId/chat"
+            element={
+              <AuthGuard requireRole="admin">
+                <AdminDashboard />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/admin/users/:userId/tokens"
+            element={
+              <AuthGuard requireRole="admin">
+                <AdminDashboard />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/admin/chat"
+            element={
+              <AuthGuard requireRole="admin">
+                <AdminDashboard />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/admin/tokens"
+            element={
+              <AuthGuard requireRole="admin">
+                <AdminDashboard />
+              </AuthGuard>
+            }
+          />
+          <Route
+            path="/admin/audit"
+            element={
+              <AuthGuard requireRole="admin">
+                <AdminDashboard />
+              </AuthGuard>
+            }
+          />
         </Routes>
       </BrowserRouter>
     </ErrorBoundary>

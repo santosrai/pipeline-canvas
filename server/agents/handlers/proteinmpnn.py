@@ -113,30 +113,75 @@ class ProteinMPNNHandler:
         self._load_pdb_content(job_data)
 
     def get_job_status(self, job_id: str) -> Dict[str, Any]:
+        # First check in-memory status (for active/running jobs)
         status = self.active_jobs.get(job_id, "not_found")
+        
+        # If not found in memory, check file system (for completed jobs after server restart)
+        if status == "not_found":
+            # Check multiple locations for result files
+            search_paths = [
+                self._base_dir / "storage" / "system" / "proteinmpnn_results" / job_id,
+                self._base_dir / "proteinmpnn_results" / job_id,  # Old location
+            ]
+            
+            for result_dir in search_paths:
+                result_file = result_dir / "result.json"
+                if result_file.exists():
+                    try:
+                        data = json.loads(result_file.read_text())
+                        status = data.get("status", "completed")
+                        response = {
+                            "job_id": job_id,
+                            "status": status,
+                            "metadata": data.get("metadata", {}),
+                        }
+                        if status == "error":
+                            response["error"] = data.get("error")
+                        logger.info(f"[ProteinMPNN] Found job status from file system: {job_id} = {status}")
+                        return response
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.warning(f"[ProteinMPNN] Failed to read status from {result_file}: {e}")
+                        continue
+        
+        # Return in-memory status
         response: Dict[str, Any] = {"job_id": job_id, "status": status}
         if job_id in self.job_results:
             response.update(self.job_results[job_id])
         return response
 
     def get_job_result(self, job_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        # Try user-scoped directory first, then fallback to old location
-        if user_id:
-            result_dir = self._base_dir / "storage" / user_id / "proteinmpnn_results" / job_id
-        else:
-            # Fallback to old location for backward compatibility
-            result_dir = Path(__file__).parent / "proteinmpnn_results" / job_id
+        # Try multiple locations in order:
+        # 1. User-scoped directory (if user_id provided)
+        # 2. System directory (for jobs created with userId="system")
+        # 3. Old location (for backward compatibility)
+        search_paths = []
         
-        result_file = result_dir / "result.json"
-        if not result_file.exists():
-            return None
-        try:
-            data = json.loads(result_file.read_text())
-            return data
-        except json.JSONDecodeError:
-            return None
+        if user_id:
+            search_paths.append(self._base_dir / "storage" / user_id / "proteinmpnn_results" / job_id)
+        
+        # Always check system directory as fallback
+        search_paths.append(self._base_dir / "storage" / "system" / "proteinmpnn_results" / job_id)
+        
+        # Old location for backward compatibility
+        search_paths.append(self._base_dir / "proteinmpnn_results" / job_id)
+        
+        logger.debug(f"[ProteinMPNN] Searching for result {job_id} (user_id={user_id}) in {len(search_paths)} locations")
+        for result_dir in search_paths:
+            result_file = result_dir / "result.json"
+            logger.debug(f"[ProteinMPNN] Checking: {result_file} (exists={result_file.exists()})")
+            if result_file.exists():
+                try:
+                    data = json.loads(result_file.read_text())
+                    logger.info(f"[ProteinMPNN] Found result at: {result_file}")
+                    return data
+                except json.JSONDecodeError as e:
+                    logger.warning(f"[ProteinMPNN] Failed to parse JSON at {result_file}: {e}")
+                    continue
+        
+        logger.warning(f"[ProteinMPNN] Result not found for {job_id} in any of {len(search_paths)} locations")
+        return None
 
-    def list_available_sources(self) -> Dict[str, Any]:
+    def list_available_sources(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         rfdiffusion_dir = Path(__file__).parent / "rfdiffusion_results"
         rfdiffusion_entries = []
         if rfdiffusion_dir.exists():
@@ -156,7 +201,11 @@ class ProteinMPNNHandler:
                 except OSError:
                     continue
 
-        uploads = list_uploaded_pdbs()
+        # If user_id is provided, list user-specific uploads; otherwise return empty list
+        if user_id:
+            uploads = list_uploaded_pdbs(user_id)
+        else:
+            uploads = []
         return {
             "rfdiffusion": rfdiffusion_entries,
             "uploads": uploads,
@@ -336,15 +385,20 @@ class ProteinMPNNHandler:
 
             if result.get("status") == "completed":
                 self.active_jobs[job_id] = "completed"
+                # Extract sequences before saving
+                await self._persist_design_outputs(result_dir, result)
+                # Update result with extracted sequences if available
+                if "sequences" in result:
+                    metadata["sequences"] = result["sequences"]
                 self.job_results[job_id] = {
                     "status": "completed",
                     "metadata": metadata,
+                    "sequences": result.get("sequences", []),
                 }
                 (result_dir / "result.json").write_text(
                     json.dumps(result, indent=2), encoding="utf-8"
                 )
-                await self._persist_design_outputs(result_dir, result)
-                log_line("proteinmpnn_job_completed", {"jobId": job_id, "status": result.get("status")})
+                log_line("proteinmpnn_job_completed", {"jobId": job_id, "status": result.get("status"), "num_sequences": len(result.get("sequences", []))})
             else:
                 self.active_jobs[job_id] = result.get("status", "error")
                 self.job_results[job_id] = {
@@ -377,32 +431,71 @@ class ProteinMPNNHandler:
         data = result.get("data") or {}
         sequences = None
 
-        # Attempt to extract designed sequences from known fields
-        possible_fields = [
-            "designed_sequences",
-            "designed_seqs",
-            "sequences",
-            "output_sequences",
-        ]
-        for field in possible_fields:
-            if field in data and isinstance(data[field], (list, tuple)):
-                sequences = list(data[field])
-                break
-        if not sequences and "result" in data and isinstance(data["result"], dict):
-            inner = data["result"]
+        # First, check for mfasta field (NVIDIA API format)
+        if "mfasta" in data and isinstance(data["mfasta"], str):
+            mfasta_content = data["mfasta"]
+            # Parse FASTA format: extract sequences (lines that don't start with >)
+            parsed_sequences = []
+            current_seq = []
+            for line in mfasta_content.split("\n"):
+                line = line.strip()
+                if line.startswith(">"):
+                    # Save previous sequence if we have one
+                    if current_seq:
+                        seq = "".join(current_seq)
+                        # Skip input sequence (usually first one with ">input" header)
+                        if not line.startswith(">input"):
+                            # Remove any chain separators (/) and extract just the sequence
+                            clean_seq = seq.split("/")[0] if "/" in seq else seq
+                            if clean_seq and all(c in "ACDEFGHIKLMNPQRSTVWY" for c in clean_seq.upper()):
+                                parsed_sequences.append(clean_seq)
+                    current_seq = []
+                elif line:
+                    # Accumulate sequence lines
+                    current_seq.append(line)
+            # Handle last sequence
+            if current_seq:
+                seq = "".join(current_seq)
+                clean_seq = seq.split("/")[0] if "/" in seq else seq
+                if clean_seq and all(c in "ACDEFGHIKLMNPQRSTVWY" for c in clean_seq.upper()):
+                    parsed_sequences.append(clean_seq)
+            if parsed_sequences:
+                sequences = parsed_sequences
+                # Also save the original mfasta as FASTA file
+                (result_dir / "designed_sequences.fasta").write_text(mfasta_content, encoding="utf-8")
+
+        # Fallback: Attempt to extract designed sequences from known fields
+        if not sequences:
+            possible_fields = [
+                "designed_sequences",
+                "designed_seqs",
+                "sequences",
+                "output_sequences",
+            ]
             for field in possible_fields:
-                if field in inner and isinstance(inner[field], (list, tuple)):
-                    sequences = list(inner[field])
-                    data = inner
+                if field in data and isinstance(data[field], (list, tuple)):
+                    sequences = list(data[field])
                     break
+            if not sequences and "result" in data and isinstance(data["result"], dict):
+                inner = data["result"]
+                for field in possible_fields:
+                    if field in inner and isinstance(inner[field], (list, tuple)):
+                        sequences = list(inner[field])
+                        data = inner
+                        break
 
         if sequences:
-            fasta_lines = []
-            for idx, seq in enumerate(sequences, start=1):
-                header = f">ProteinMPNN_design_{idx}"
-                fasta_lines.append(header)
-                fasta_lines.append(seq)
-            (result_dir / "designed_sequences.fasta").write_text("\n".join(fasta_lines), encoding="utf-8")
+            # If we didn't already write FASTA from mfasta, create it now
+            if not (result_dir / "designed_sequences.fasta").exists():
+                fasta_lines = []
+                for idx, seq in enumerate(sequences, start=1):
+                    header = f">ProteinMPNN_design_{idx}"
+                    fasta_lines.append(header)
+                    fasta_lines.append(seq)
+                (result_dir / "designed_sequences.fasta").write_text("\n".join(fasta_lines), encoding="utf-8")
+            
+            # Store sequences in result.json for easy access
+            result["sequences"] = sequences
 
         (result_dir / "raw_data.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
 

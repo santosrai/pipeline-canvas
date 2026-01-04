@@ -54,13 +54,13 @@ export const LandingPage: React.FC = () => {
       </ErrorBoundary>
       
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+      <div className="flex-1 flex flex-col items-center justify-center px-3 sm:px-4 py-6 sm:py-8">
         {/* Hero Section */}
-        <div className="text-center mb-12 max-w-3xl">
-          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-4">
+        <div className="text-center mb-8 sm:mb-12 max-w-3xl">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-3 sm:mb-4">
             Build something powerful
           </h1>
-          <p className="text-xl text-gray-600">
+          <p className="text-base sm:text-lg md:text-xl text-gray-600 px-2">
             Create protein designs and visualizations by chatting with AI
           </p>
         </div>

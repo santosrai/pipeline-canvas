@@ -26,15 +26,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ onFileSelect }) => {
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
 
   const loadFiles = useCallback(async () => {
-    if (!activeSessionId) {
-      console.log('[FileBrowser] No active session ID, skipping file load');
-      return;
-    }
-    
-    console.log('[FileBrowser] Loading files for session:', activeSessionId);
+    console.log('[FileBrowser] Loading all user files');
     setLoading(true);
     try {
-      const response = await api.get(`/sessions/${activeSessionId}/files`);
+      // Use /api/files endpoint to get all user files (not just session-specific)
+      // Files are already user-scoped in the database, so no risk of mixing users
+      // Note: api.get('/files') will become /api/files since baseURL includes /api
+      const response = await api.get(`/files`);
       console.log('[FileBrowser] Response:', response.data);
       if (response.data.status === 'success') {
         const files = response.data.files || [];
@@ -45,45 +43,38 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ onFileSelect }) => {
         setFiles([]);
       }
     } catch (error: any) {
-      console.error('[FileBrowser] Failed to load session files:', error);
+      console.error('[FileBrowser] Failed to load user files:', error);
       if (error.response) {
         console.error('[FileBrowser] Error response:', error.response.status, error.response.data);
       }
       if (error.response?.status === 404) {
-        console.warn('[FileBrowser] Session files endpoint not found - server may need restart');
+        console.warn('[FileBrowser] User files endpoint not found - server may need restart');
       }
       setFiles([]);
     } finally {
       setLoading(false);
     }
-  }, [activeSessionId]);
+  }, []);
 
   // Listen for custom events to refresh files
   useEffect(() => {
     const handleFileAdded = () => {
-      console.log('[FileBrowser] session-file-added event received, activeSessionId:', activeSessionId);
-      if (activeSessionId) {
-        // Small delay to ensure backend has saved the file
-        setTimeout(() => {
-          console.log('[FileBrowser] Refreshing files after session-file-added event');
-          loadFiles();
-        }, 1000); // Increased delay to match PipelineExecution
-      } else {
-        console.warn('[FileBrowser] session-file-added event received but no activeSessionId');
-      }
+      console.log('[FileBrowser] session-file-added event received');
+      // Small delay to ensure backend has saved the file
+      setTimeout(() => {
+        console.log('[FileBrowser] Refreshing files after session-file-added event');
+        loadFiles();
+      }, 1000); // Increased delay to match PipelineExecution
     };
 
     window.addEventListener('session-file-added', handleFileAdded);
     return () => window.removeEventListener('session-file-added', handleFileAdded);
-  }, [activeSessionId, loadFiles]);
+  }, [loadFiles]);
 
+  // Load files on mount and when loadFiles changes
   useEffect(() => {
-    if (activeSessionId) {
-      loadFiles();
-    } else {
-      setFiles([]);
-    }
-  }, [activeSessionId, loadFiles]);
+    loadFiles();
+  }, [loadFiles]);
 
   const toggleFolder = (folder: string) => {
     const newExpanded = new Set(expandedFolders);
@@ -122,18 +113,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ onFileSelect }) => {
   const handleDeleteFile = async (file: FileMetadata, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent file selection when clicking delete
     
-    if (!activeSessionId) {
-      console.error('[FileBrowser] No active session ID for deletion');
-      return;
-    }
-    
     if (!confirm(`Are you sure you want to delete "${file.filename}"?`)) {
       return;
     }
     
     setDeletingFileId(file.file_id);
     try {
-      await api.delete(`/sessions/${activeSessionId}/files/${file.file_id}`);
+      // Use generic file delete endpoint (files are user-scoped, so no session needed)
+      await api.delete(`/files/${file.file_id}`);
       console.log('[FileBrowser] File deleted successfully:', file.file_id);
       // Refresh file list
       await loadFiles();
@@ -141,7 +128,18 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ onFileSelect }) => {
       window.dispatchEvent(new CustomEvent('session-file-deleted', { detail: { file_id: file.file_id } }));
     } catch (error: any) {
       console.error('[FileBrowser] Failed to delete file:', error);
-      alert(`Failed to delete file: ${error.response?.data?.error || error.message}`);
+      // If generic endpoint doesn't exist, try session endpoint as fallback
+      if (error.response?.status === 404 && activeSessionId) {
+        try {
+          await api.delete(`/sessions/${activeSessionId}/files/${file.file_id}`);
+          await loadFiles();
+          window.dispatchEvent(new CustomEvent('session-file-deleted', { detail: { file_id: file.file_id } }));
+        } catch (fallbackError: any) {
+          alert(`Failed to delete file: ${fallbackError.response?.data?.error || fallbackError.message}`);
+        }
+      } else {
+        alert(`Failed to delete file: ${error.response?.data?.error || error.message}`);
+      }
     } finally {
       setDeletingFileId(null);
     }
@@ -254,7 +252,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ onFileSelect }) => {
         {files.length === 0 ? (
           <div className="text-center text-gray-400 mt-8">
             <File className="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">No files in this session</p>
+            <p className="text-sm">No files</p>
           </div>
         ) : (
           <div className="space-y-1">

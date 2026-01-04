@@ -119,7 +119,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ models, onModelCha
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-[100] max-h-96 overflow-hidden flex flex-col">
+        <div className="absolute bottom-full left-0 mb-2 w-[calc(100vw-2rem)] sm:w-80 max-w-sm bg-white border border-gray-200 rounded-lg shadow-lg z-[100] max-h-96 overflow-hidden flex flex-col">
           {/* Search bar */}
           <div className="p-2 border-b border-gray-200">
             <div className="relative">

@@ -66,7 +66,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose 
   const Tab = ({ id, icon: Icon, label }: { id: typeof activeTab; icon: any; label: string }) => (
     <button
       onClick={() => setActiveTab(id)}
-      className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${activeTab === id
+      className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm transition-colors whitespace-nowrap ${activeTab === id
         ? 'bg-blue-100 text-blue-700 border border-blue-200'
         : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
         }`}
@@ -130,23 +130,23 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose 
   );
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Settings</h2>
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Settings</h2>
           <button
             onClick={handleCancel}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
         </div>
 
-        <div className="flex h-[500px]">
+        <div className="flex flex-col sm:flex-row h-[calc(95vh-73px)] sm:h-[500px]">
           {/* Sidebar */}
-          <div className="w-48 bg-gray-50 border-r border-gray-200 p-4">
-            <div className="space-y-2">
+          <div className="w-full sm:w-48 bg-gray-50 border-b sm:border-b-0 sm:border-r border-gray-200 p-3 sm:p-4">
+            <div className="flex sm:flex-col space-x-2 sm:space-x-0 sm:space-y-2 overflow-x-auto sm:overflow-x-visible">
               <Tab id="editor" icon={Code2} label="Editor" />
               <Tab id="interface" icon={Palette} label="Interface" />
               <Tab id="api" icon={Zap} label="API Keys" />
@@ -157,7 +157,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ isOpen, onClose 
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto">
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               {activeTab === 'editor' && (
                 <div className="space-y-1">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Code Editor Settings</h3>

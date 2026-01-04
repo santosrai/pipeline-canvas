@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { usePipelineStore, ExecutionLogEntry } from '../store/pipelineStore';
 import { PipelineNode } from '../types/index';
 import { Trash2, Upload, X, File, ArrowLeft, Play, CheckCircle2, Info, Copy, Search, AlertCircle } from 'lucide-react';
+import { getAuthHeaders } from '../../../utils/api';
 
 interface PipelineNodeConfigProps {
   nodeId: string;
@@ -245,8 +246,12 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
       const formData = new FormData();
       formData.append('file', file);
 
+      // Get auth headers for the request
+      const headers = getAuthHeaders();
+
       const response = await fetch('/api/upload/pdb', {
         method: 'POST',
+        headers,
         body: formData,
       });
 

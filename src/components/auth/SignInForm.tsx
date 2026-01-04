@@ -17,7 +17,13 @@ export const SignInForm: React.FC = () => {
 
     try {
       await signin(email, password);
-      navigate('/app');
+      // Check user role and redirect accordingly
+      const user = useAuthStore.getState().user;
+      if (user?.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/app');
+      }
     } catch (err: any) {
       setError(err.message || 'Sign in failed');
     } finally {
