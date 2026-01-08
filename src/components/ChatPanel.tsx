@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Download, Play, X, Copy } from 'lucide-react';
+import { Send, Sparkles, Download, Play, X, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import { useChatHistoryStore, useActiveSession, Message } from '../stores/chatHistoryStore';
 import { CodeExecutor } from '../utils/codeExecutor';
-import { api, fetchAgents, fetchModels, Agent, Model } from '../utils/api';
+import { api, fetchAgents, fetchModels, Agent, Model, getAuthHeaders } from '../utils/api';
 import { v4 as uuidv4 } from 'uuid';
 import { AlphaFoldDialog } from './AlphaFoldDialog';
 import { RFdiffusionDialog } from './RFdiffusionDialog';
 import { ProteinMPNNDialog } from './ProteinMPNNDialog';
-import { ProgressTracker, useAlphaFoldProgress, useProteinMPNNProgress } from './ProgressTracker';
+import { ProgressTracker, useAlphaFoldProgress, useProteinMPNNProgress, useRFdiffusionProgress } from './ProgressTracker';
 import { ErrorDisplay } from './ErrorDisplay';
 import { ErrorDetails, AlphaFoldErrorHandler, RFdiffusionErrorHandler, ErrorCategory, ErrorSeverity } from '../utils/errorHandler';
 import { logAlphaFoldError } from '../utils/errorLogger';
@@ -16,6 +16,7 @@ import { AgentSelector } from './AgentSelector';
 import { ModelSelector } from './ModelSelector';
 import { useAgentSettings } from '../stores/settingsStore';
 import { ThinkingProcessDisplay } from './ThinkingProcessDisplay';
+import { AttachmentMenu } from './AttachmentMenu';
 
 // Extended message metadata for structured agent results
 interface ExtendedMessage extends Message {
@@ -40,6 +41,13 @@ interface ExtendedMessage extends Message {
       raw?: string;
     };
     metadata?: Record<string, any>;
+  };
+  rfdiffusionResult?: {
+    pdbContent?: string;
+    fileId?: string; // File ID for loading from server
+    filename?: string;
+    parameters?: any;
+    metadata?: any;
   };
   thinkingProcess?: {
     steps: Array<{
@@ -163,6 +171,28 @@ const convertThinkingData = (thinkingProcess: any): ExtendedMessage['thinkingPro
   return undefined;
 };
 
+// Generate a user-friendly message for code execution
+const getExecutionMessage = (userRequest: string): string => {
+  const request = userRequest.toLowerCase().trim();
+  
+  // Extract the main subject (what they want to see)
+  const subjectMatch = request.match(/(?:show|display|visualize|view|load|open|see)\s+(.+?)(?:\s|$)/i);
+  const subject = subjectMatch ? subjectMatch[1].trim() : request;
+  
+  // Clean up common trailing words
+  const cleanSubject = subject.replace(/\s+(structure|protein|molecule|chain|helix)$/i, '').trim();
+  
+  // If it's a short, meaningful subject, use it
+  if (cleanSubject && cleanSubject.length < 40 && cleanSubject.length > 0) {
+    // Capitalize first letter
+    const capitalized = cleanSubject.charAt(0).toUpperCase() + cleanSubject.slice(1);
+    return `Loading ${capitalized}...`;
+  }
+  
+  // Fallback to a simple message
+  return 'Loading structure...';
+};
+
 const extractProteinMPNNSequences = (payload: any): string[] => {
   if (!payload) return [];
 
@@ -227,7 +257,7 @@ const createProteinMPNNError = (
 });
 
 export const ChatPanel: React.FC = () => {
-  const { plugin, currentCode, setCurrentCode, setIsExecuting, setActivePane, setPendingCodeToRun, setViewerVisible } = useAppStore();
+  const { plugin, currentCode, setCurrentCode, setIsExecuting, setActivePane, setPendingCodeToRun, setViewerVisible, setCurrentStructureOrigin } = useAppStore();
   const selections = useAppStore(state => state.selections);
   const removeSelection = useAppStore(state => state.removeSelection);
   const clearSelections = useAppStore(state => state.clearSelections);
@@ -251,19 +281,67 @@ export const ChatPanel: React.FC = () => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [lastAgentId, setLastAgentId] = useState<string>('');
+  const [isQuickStartExpanded, setIsQuickStartExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previousSessionIdRef = useRef<string | null>(null);
+  
+  // PDB file upload state - track files with their upload status
+  interface FileUploadState {
+    file: File;
+    id: string; // Unique ID for reliable matching
+    status: 'uploading' | 'uploaded' | 'error';
+    fileInfo?: {
+      file_id: string;
+      filename: string;
+      file_url: string;
+      atoms: number;
+      chains: string[];
+      size: number;
+    };
+    error?: string;
+  }
+  const [fileUploads, setFileUploads] = useState<FileUploadState[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   // Refs to track latest values for session switching (avoid stale closures)
   const currentCodeRef = useRef<string | null>(currentCode);
   const isViewerVisibleRef = useRef<boolean>(isViewerVisible);
+  const hasAttemptedCreateRef = useRef<boolean>(false);
 
-  // Initialize session if none exists
+  // Get sync state and sessions from store
+  const isSyncing = useChatHistoryStore(state => state._isSyncing);
+  const sessions = useChatHistoryStore(state => state.sessions);
+
+  // Reset hasAttemptedCreateRef when a session is successfully created or switched
   useEffect(() => {
-    if (!activeSessionId) {
-      createSession();
+    if (activeSessionId) {
+      hasAttemptedCreateRef.current = false;
     }
-  }, [activeSessionId, createSession]);
+  }, [activeSessionId]);
+
+  // Initialize session if none exists (but wait for sync to complete)
+  useEffect(() => {
+    // Don't create if:
+    // 1. Already have an active session
+    // 2. Sync is in progress (wait for it to complete)
+    // 3. Already attempted to create (prevent duplicate creation)
+    // 4. Sessions exist (even if no activeSessionId, they might be loading)
+    if (activeSessionId || isSyncing || hasAttemptedCreateRef.current || sessions.length > 0) {
+      return;
+    }
+
+    // Wait a bit for store rehydration and backend sync to complete
+    const timeoutId = setTimeout(() => {
+      // Double-check conditions after delay
+      const currentState = useChatHistoryStore.getState();
+      if (!currentState.activeSessionId && !currentState._isSyncing && currentState.sessions.length === 0) {
+        hasAttemptedCreateRef.current = true;
+        createSession();
+      }
+    }, 500); // Wait 500ms for sync to complete
+
+    return () => clearTimeout(timeoutId);
+  }, [activeSessionId, isSyncing, sessions.length, createSession]);
 
   // Initialize previous session ID ref on mount
   useEffect(() => {
@@ -371,6 +449,7 @@ export const ChatPanel: React.FC = () => {
   // RFdiffusion state
   const [showRFdiffusionDialog, setShowRFdiffusionDialog] = useState(false);
   const [rfdiffusionData, setRfdiffusionData] = useState<any>(null);
+  const rfdiffusionProgress = useRFdiffusionProgress();
 
   // Agent and model selection state
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -407,7 +486,7 @@ export const ChatPanel: React.FC = () => {
     try {
       const parsed = JSON.parse(content);
       return (
-        <pre className="text-xs whitespace-pre-wrap bg-white border border-gray-200 rounded p-2 overflow-x-auto">
+        <pre className="text-[10px] whitespace-pre-wrap bg-white border border-gray-200 rounded p-1.5 overflow-x-auto leading-relaxed">
           {JSON.stringify(parsed, null, 2)}
         </pre>
       );
@@ -426,11 +505,11 @@ export const ChatPanel: React.FC = () => {
       const dataRows = lines.slice(2).map(l => l.split("|").map(s => s.trim()));
       return (
         <div className="overflow-x-auto">
-          <table className="text-xs w-full border border-gray-200">
+          <table className="text-[10px] w-full border border-gray-200">
             <thead className="bg-gray-50">
               <tr>
                 {header.map((h, i) => (
-                  <th key={i} className="text-left px-2 py-1 border-b border-gray-200">{h}</th>
+                  <th key={i} className="text-left px-1.5 py-0.5 border-b border-gray-200">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -438,7 +517,7 @@ export const ChatPanel: React.FC = () => {
               {dataRows.map((r, ri) => (
                 <tr key={ri} className={ri % 2 ? 'bg-gray-50' : ''}>
                   {r.map((c, ci) => (
-                    <td key={ci} className="px-2 py-1 align-top border-b border-gray-100">{c || '-'}</td>
+                    <td key={ci} className="px-1.5 py-0.5 align-top border-b border-gray-100">{c || '-'}</td>
                   ))}
                 </tr>
               ))}
@@ -448,7 +527,148 @@ export const ChatPanel: React.FC = () => {
       );
     }
 
-    return <p className="text-sm">{content}</p>;
+    // Handle multi-paragraph content with proper line breaks
+    // Split by double newlines for paragraphs, single newlines for line breaks
+    const paragraphs = content.split(/\n\n+/).filter(p => p.trim());
+    
+    if (paragraphs.length > 1) {
+      // Multi-paragraph content - render each paragraph separately
+      return (
+        <div className="text-sm space-y-1">
+          {paragraphs.map((para, idx) => (
+            <p key={idx} className="whitespace-pre-wrap leading-relaxed">{para.trim()}</p>
+          ))}
+        </div>
+      );
+    }
+    
+    // Single paragraph or no double newlines - preserve single newlines
+    return <p className="text-sm whitespace-pre-wrap leading-relaxed">{content}</p>;
+  };
+
+  // Helper function to validate uploaded file info (type guard)
+  const isValidUploadedFile = (
+    fileInfo: ExtendedMessage['uploadedFile']
+  ): fileInfo is NonNullable<ExtendedMessage['uploadedFile']> => {
+    return !!(
+      fileInfo &&
+      fileInfo.file_id &&
+      fileInfo.filename &&
+      fileInfo.file_url &&
+      typeof fileInfo.atoms === 'number' &&
+      Array.isArray(fileInfo.chains)
+    );
+  };
+
+  const loadUploadedFileInViewer = async (fileInfo: { file_id: string; filename: string; file_url: string }) => {
+    if (!plugin) return;
+    
+    try {
+      setIsExecuting(true);
+      const executor = new CodeExecutor(plugin);
+      
+      // Fetch file content and create blob URL (like AlphaFold does)
+      const fileResponse = await fetch(fileInfo.file_url);
+      if (!fileResponse.ok) {
+        throw new Error('Failed to fetch uploaded file');
+      }
+      const fileContent = await fileResponse.text();
+      
+      // Create blob URL
+      const pdbBlob = new Blob([fileContent], { type: 'text/plain' });
+      const blobUrl = URL.createObjectURL(pdbBlob);
+      
+      // Load structure in viewer using blob URL
+      const code = `
+try {
+  await builder.clearStructure();
+  await builder.loadStructure('${blobUrl}');
+  await builder.addCartoonRepresentation({ color: 'secondary-structure' });
+  builder.focusView();
+  console.log('Uploaded file loaded successfully');
+} catch (e) { 
+  console.error('Failed to load uploaded file:', e); 
+}`;
+      
+      // Save code to editor so user can see and modify it
+      setCurrentCode(code);
+      
+      // Set structure origin for LLM context
+      setCurrentStructureOrigin({
+        type: 'upload',
+        filename: fileInfo.filename,
+        metadata: {
+          file_id: fileInfo.file_id,
+          file_url: fileInfo.file_url,
+        },
+      });
+      
+      // Save code to active session for persistence
+      if (activeSessionId) {
+        saveVisualizationCode(activeSessionId, code);
+        console.log('[ChatPanel] Saved visualization code to session:', activeSessionId);
+      }
+      
+      await executor.executeCode(code);
+      setViewerVisibleAndSave(true);
+      setActivePane('viewer');
+      
+      // Keep blob URL alive for a bit longer to ensure structure loads
+      setTimeout(() => {
+        URL.revokeObjectURL(blobUrl);
+      }, 5000);
+    } catch (err) {
+      console.error('Failed to load uploaded file in viewer:', err);
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const renderFileAttachment = (fileInfo: ExtendedMessage['uploadedFile'], isUserMessage: boolean = false) => {
+    if (!isValidUploadedFile(fileInfo)) return null;
+
+    // Use different styling for user vs AI messages
+    const bgClass = isUserMessage 
+      ? 'bg-white bg-opacity-20 border-white border-opacity-30' 
+      : 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200';
+    const textClass = isUserMessage ? 'text-white' : 'text-gray-900';
+    const textSecondaryClass = isUserMessage ? 'text-white text-opacity-80' : 'text-gray-600';
+    const buttonClass = isUserMessage
+      ? 'bg-white text-blue-600 hover:bg-gray-100'
+      : 'bg-blue-600 text-white hover:bg-blue-700';
+
+    return (
+      <div className={`mt-3 p-4 ${bgClass} rounded-lg`}>
+        <div className="flex items-center space-x-2 mb-3">
+          <div className={`w-8 h-8 ${isUserMessage ? 'bg-white bg-opacity-30' : 'bg-blue-600'} rounded-full flex items-center justify-center`}>
+            <span className={`${isUserMessage ? 'text-white' : 'text-white'} text-sm font-bold`}>PDB</span>
+          </div>
+          <div>
+            <h4 className={`font-medium ${textClass}`}>Uploaded PDB File</h4>
+            <p className={`text-xs ${textSecondaryClass}`}>
+              {fileInfo.filename} • {fileInfo.atoms} atoms • {fileInfo.chains.length} chain{fileInfo.chains.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+        </div>
+        
+        {fileInfo.chains.length > 0 && (
+          <div className={`mb-3 text-xs ${textSecondaryClass}`}>
+            <span>Chains: {fileInfo.chains.join(', ')}</span>
+          </div>
+        )}
+        
+        <div className="flex space-x-2">
+          <button
+            onClick={() => loadUploadedFileInViewer(fileInfo)}
+            disabled={!plugin}
+            className={`flex items-center space-x-1 px-3 py-2 ${buttonClass} rounded-md disabled:opacity-50 disabled:cursor-not-allowed text-sm`}
+          >
+            <Play className="w-4 h-4" />
+            <span>View in 3D</span>
+          </button>
+        </div>
+      </div>
+    );
   };
 
   const renderAlphaFoldResult = (result: ExtendedMessage['alphafoldResult']) => {
@@ -541,6 +761,179 @@ try {
           <button
             onClick={loadInViewer}
             disabled={!plugin}
+            className="flex items-center space-x-1 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            <Play className="w-4 h-4" />
+            <span>View 3D</span>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderRFdiffusionResult = (result: ExtendedMessage['rfdiffusionResult']) => {
+    if (!result) {
+      return null;
+    }
+    
+    // Debug logging
+    console.log('[ChatPanel] Rendering RFdiffusion result:', {
+      hasFileId: !!result.fileId,
+      hasPdbContent: !!result.pdbContent,
+      filename: result.filename
+    });
+
+    const downloadPDB = async () => {
+      try {
+        let pdbContent: string;
+        
+        // If we have fileId, fetch from server (preferred for large files)
+        if (result.fileId) {
+          try {
+            const fileResponse = await api.get(`/files/${result.fileId}`);
+            if (fileResponse.data.status === 'success') {
+              pdbContent = fileResponse.data.content;
+            } else {
+              throw new Error('Failed to fetch file from server');
+            }
+          } catch (fetchError) {
+            console.error('Failed to fetch file for download:', fetchError);
+            // Fallback to pdbContent if available
+            if (result.pdbContent) {
+              pdbContent = result.pdbContent;
+            } else {
+              alert('File not available for download. It may have been deleted.');
+              return;
+            }
+          }
+        } else if (result.pdbContent) {
+          pdbContent = result.pdbContent;
+        } else {
+          alert('No file content available for download.');
+          return;
+        }
+        
+        const blob = new Blob([pdbContent], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = result.filename || 'rfdiffusion_result.pdb';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.error('Failed to download PDB:', err);
+        alert(`Failed to download file: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    };
+
+    const loadInViewer = async () => {
+      if (!plugin) {
+        alert('3D viewer is not ready yet. Please wait a moment and try again.');
+        return;
+      }
+      
+      try {
+        setIsExecuting(true);
+        const executor = new CodeExecutor(plugin);
+        
+        // Get file content - either from saved file or use existing pdbContent
+        let pdbContent: string;
+        if (result.fileId) {
+          // Fetch file content from server with authentication
+          try {
+            const fileResponse = await api.get(`/files/${result.fileId}`);
+            if (fileResponse.data.status === 'success') {
+              pdbContent = fileResponse.data.content;
+            } else {
+              throw new Error('Failed to fetch file content from server');
+            }
+          } catch (fetchError) {
+            console.error('Failed to fetch file from server:', fetchError);
+            // Fallback to pdbContent if available
+            if (result.pdbContent) {
+              pdbContent = result.pdbContent;
+            } else {
+              throw new Error('No file content available');
+            }
+          }
+        } else if (result.pdbContent) {
+          pdbContent = result.pdbContent;
+        } else {
+          throw new Error('No file content or file ID available');
+        }
+        
+        // Create blob URL from content
+        const pdbBlob = new Blob([pdbContent], { type: 'text/plain' });
+        const blobUrl = URL.createObjectURL(pdbBlob);
+        
+        // Load structure in viewer using blob URL
+        const code = `
+try {
+  await builder.clearStructure();
+  await builder.loadStructure('${blobUrl}');
+  await builder.addCartoonRepresentation({ color: 'secondary-structure' });
+  builder.focusView();
+  console.log('RFdiffusion result loaded successfully');
+} catch (e) { 
+  console.error('Failed to load RFdiffusion result:', e); 
+}`;
+        
+        await executor.executeCode(code);
+        setViewerVisibleAndSave(true);
+        setActivePane('viewer');
+        
+        // Keep blob URL alive for a bit longer to ensure structure loads
+        setTimeout(() => {
+          URL.revokeObjectURL(blobUrl);
+        }, 5000);
+      } catch (err) {
+        console.error('Failed to load RFdiffusion result in viewer:', err);
+        alert(`Failed to load structure: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      } finally {
+        setIsExecuting(false);
+      }
+    };
+
+    return (
+      <div className="mt-3 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
+        <div className="flex items-center space-x-2 mb-3">
+          <div className="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">
+            <span className="text-white text-sm font-bold">RF</span>
+          </div>
+          <div>
+            <h4 className="font-medium text-gray-900">RFdiffusion Protein Design</h4>
+            <p className="text-xs text-gray-600">
+              Structure designed
+            </p>
+          </div>
+        </div>
+        
+        {result.metadata && (
+          <div className="mb-3 text-xs text-gray-600">
+            <div className="grid grid-cols-2 gap-2">
+              {result.parameters?.design_mode && (
+                <span>Mode: {result.parameters.design_mode}</span>
+              )}
+              {result.parameters?.contigs && (
+                <span>Contigs: {result.parameters.contigs}</span>
+              )}
+            </div>
+          </div>
+        )}
+        
+        <div className="flex space-x-2">
+          <button
+            onClick={downloadPDB}
+            className="flex items-center space-x-1 px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm"
+          >
+            <Download className="w-4 h-4" />
+            <span>Download PDB</span>
+          </button>
+          
+          <button
+            onClick={loadInViewer}
             className="flex items-center space-x-1 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             <Play className="w-4 h-4" />
@@ -968,31 +1361,65 @@ try {
     setShowRFdiffusionDialog(false);
     
     const jobId = `rf_${Date.now()}`;
+    console.log('🚀 [RFdiffusion] User confirmed design request');
+    console.log('⚙️ [RFdiffusion] Parameters:', parameters);
+    console.log('🆔 [RFdiffusion] Generated job ID:', jobId);
     
+    rfdiffusionProgress.startProgress(jobId, 'Submitting protein design request...');
+    console.log('📡 [RFdiffusion] Starting progress tracking for job:', jobId);
+
+    const startTime = Date.now();
+    const estimatedDuration = 480; // 8 minutes estimated for RFdiffusion
+    
+    // Update progress while waiting for response
+    const progressInterval = setInterval(() => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const progress = Math.min(90, Math.round((elapsed / estimatedDuration) * 90));
+      rfdiffusionProgress.updateProgress(`Designing protein structure... (${Math.round(elapsed)}s)`, progress);
+    }, 2000); // Update every 2 seconds
+
     try {
+      console.log('🌐 [RFdiffusion] Making API call to /api/rfdiffusion/design');
       const response = await api.post('/rfdiffusion/design', {
         parameters,
-        jobId
+        jobId,
+        sessionId: activeSessionId
       });
 
+      clearInterval(progressInterval);
+      console.log('📨 [RFdiffusion] API response received:', response.status, response.data);
+
+      // Handle success response
       if (response.data.status === 'success') {
         const result = response.data.data;
         
-        // Add result message to chat
+        // Dispatch event to notify file browser to refresh
+        window.dispatchEvent(new CustomEvent('session-file-added'));
+        
         const aiMessage: ExtendedMessage = {
           id: (Date.now() + 1).toString(),
           content: `RFdiffusion protein design completed successfully! The designed structure is ready for download and visualization.`,
           type: 'ai',
           timestamp: new Date(),
-          alphafoldResult: { // Reuse the same result format for display
-            pdbContent: result.pdbContent,
+          rfdiffusionResult: {
+            // Only include pdbContent if it's small enough (under 1MB to avoid database issues)
+            // For larger files, we'll fetch from server using fileId
+            pdbContent: result.pdbContent && result.pdbContent.length < 1000000 ? result.pdbContent : undefined,
+            fileId: result.fileId || jobId, // File ID for loading from server (always include)
             filename: result.filename || `designed_${Date.now()}.pdb`,
             parameters,
             metadata: result.metadata
           }
         };
         
+        console.log('[RFdiffusion] Saving result message:', {
+          hasFileId: !!aiMessage.rfdiffusionResult?.fileId,
+          hasPdbContent: !!aiMessage.rfdiffusionResult?.pdbContent,
+          pdbContentLength: aiMessage.rfdiffusionResult?.pdbContent?.length || 0
+        });
+        
         addMessage(aiMessage);
+        rfdiffusionProgress.completeProgress();
       } else {
         // Handle API error response
         const apiError = RFdiffusionErrorHandler.handleError(response.data, {
@@ -1010,9 +1437,11 @@ try {
         };
         
         addMessage(errorMessage);
+        rfdiffusionProgress.errorProgress(apiError.userMessage);
       }
     } catch (error: any) {
-      console.error('RFdiffusion request failed:', error);
+      clearInterval(progressInterval);
+      console.error('❌ [RFdiffusion] Request failed:', error);
       
       // Handle different types of errors
       const structuredError = RFdiffusionErrorHandler.handleError(error, {
@@ -1030,6 +1459,7 @@ try {
       };
       
       addMessage(errorMessage);
+      rfdiffusionProgress.errorProgress(structuredError.userMessage);
     }
   };
 
@@ -1087,24 +1517,205 @@ try {
     return false; // Not handled
   };
 
+  // Upload file immediately when selected
+  const uploadFile = async (fileId: string, file: File) => {
+    // Update status to uploading
+    setFileUploads(prev => prev.map(item => 
+      item.id === fileId ? { ...item, status: 'uploading' } : item
+    ));
+
+    try {
+      setUploadError(null);
+      const formData = new FormData();
+      formData.append('file', file);
+      if (activeSessionId) {
+        formData.append('session_id', activeSessionId);
+      }
+
+      const headers = getAuthHeaders();
+      const response = await fetch('/api/upload/pdb', {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Upload failed' }));
+        throw new Error(errorData.detail || 'Upload failed');
+      }
+
+      const result = await response.json();
+      const fileInfo = {
+        file_id: result.file_info.file_id,
+        filename: result.file_info.filename,
+        file_url: result.file_info.file_url,
+        atoms: result.file_info.atoms,
+        chains: result.file_info.chains,
+        size: result.file_info.size || 0,
+      };
+
+      // Mark file as uploaded using the unique ID
+      let isFirstFile = false;
+      setFileUploads(prev => {
+        const updated = prev.map(item => 
+          item.id === fileId 
+            ? { ...item, status: 'uploaded' as const, fileInfo } 
+            : item
+        );
+        // Check if this is the first uploaded file
+        isFirstFile = updated.findIndex(item => item.status === 'uploaded') === 0;
+        console.log('[ChatPanel] File uploaded successfully:', {
+          fileId,
+          filename: fileInfo.filename,
+          file_id: fileInfo.file_id,
+          totalUploads: updated.length,
+          uploadedCount: updated.filter(item => item.status === 'uploaded').length,
+        });
+        return updated;
+      });
+
+      // Dispatch event to notify file browser to refresh
+      window.dispatchEvent(new CustomEvent('session-file-added'));
+
+      // Clear previous PDB context when new file is uploaded
+      setCurrentCode('');
+      setCurrentStructureOrigin(null);
+
+      // Auto-load first uploaded file in viewer
+      if (isFirstFile && plugin) {
+        try {
+          setIsExecuting(true);
+          const executor = new CodeExecutor(plugin);
+          await executor.executeCode('try { await builder.clearStructure(); } catch(e) { console.warn("Clear failed:", e); }');
+          
+          const fileUrl = result.file_info.file_url || `/api/upload/pdb/${result.file_info.file_id}`;
+          const fileResponse = await fetch(fileUrl, { headers: getAuthHeaders() });
+          if (!fileResponse.ok) {
+            throw new Error('Failed to fetch uploaded file');
+          }
+          const fileContent = await fileResponse.text();
+          
+          const pdbBlob = new Blob([fileContent], { type: 'text/plain' });
+          const blobUrl = URL.createObjectURL(pdbBlob);
+          
+          const loadCode = `
+try {
+  await builder.loadStructure('${blobUrl}');
+  await builder.addCartoonRepresentation({ color: 'secondary-structure' });
+  builder.focusView();
+  console.log('Uploaded file loaded successfully');
+} catch (e) { 
+  console.error('Failed to load uploaded file:', e); 
+}`;
+          
+          setCurrentCode(loadCode);
+          setCurrentStructureOrigin({
+            type: 'upload',
+            filename: result.file_info.filename,
+            metadata: {
+              file_id: result.file_info.file_id,
+              file_url: blobUrl,
+            },
+          });
+          
+          if (activeSessionId) {
+            saveVisualizationCode(activeSessionId, loadCode);
+          }
+          
+          await executor.executeCode(loadCode);
+          setViewerVisibleAndSave(true);
+          setActivePane('viewer');
+          
+          setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+          }, 5000);
+        } catch (viewerError) {
+          console.error('Failed to auto-load uploaded file in viewer:', viewerError);
+        } finally {
+          setIsExecuting(false);
+        }
+      }
+    } catch (error: any) {
+      console.error('File upload failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+      setUploadError(errorMessage);
+      // Mark file as error using the unique ID
+      setFileUploads(prev => prev.map(item => 
+        item.id === fileId 
+          ? { ...item, status: 'error', error: errorMessage } 
+          : item
+      ));
+    }
+  };
+
+  // Handle file selection - add to list and start upload immediately
+  const handleFileSelected = (file: File) => {
+    const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const newFileState: FileUploadState = {
+      file,
+      id: fileId,
+      status: 'uploading',
+    };
+    console.log('[ChatPanel] File selected for upload:', {
+      fileId,
+      filename: file.name,
+      size: file.size,
+    });
+    setFileUploads(prev => {
+      const updated = [...prev, newFileState];
+      console.log('[ChatPanel] File added to state, total files:', updated.length);
+      return updated;
+    });
+    // Start upload immediately using the unique ID
+    uploadFile(fileId, file);
+  };
+
+  // Handle multiple files selected
+  const handleFilesSelected = (files: File[]) => {
+    const newFileStates: FileUploadState[] = files.map(file => {
+      const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      return {
+        file,
+        id: fileId,
+        status: 'uploading' as const,
+      };
+    });
+    setFileUploads(prev => [...prev, ...newFileStates]);
+    // Start uploads immediately for all files
+    newFileStates.forEach(({ id, file }) => {
+      uploadFile(id, file);
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
+    // Get uploaded file info (use first uploaded file)
+    const uploadedFileInfo = fileUploads.find(f => f.status === 'uploaded' && f.fileInfo)?.fileInfo || null;
+
+    // Create user message immediately and add to chat
     const userMessage: Message = {
       id: uuidv4(),
       content: input.trim(),
       type: 'user',
-      timestamp: new Date()
+      timestamp: new Date(),
+      uploadedFile: uploadedFileInfo || undefined,
     };
 
+    // Add user message to chat immediately (before any async operations)
     addMessage(userMessage);
+    const messageInput = input.trim();
     setInput('');
     setIsLoading(true);
 
+    // Clear uploaded files from state after message is sent
+    setFileUploads([]);
+    
     try {
-      const text = userMessage.content;
+      const text = messageInput;
       let code = '';
+      let aiText = ''; // AI text response for better user experience
       let thinkingProcess: ExtendedMessage['thinkingProcess'] | undefined = undefined;
       try {
         const payload = {
@@ -1289,8 +1900,10 @@ try {
           return; // Exit early - no code generation or execution
         }
         code = response.data?.code || '';
+        // Extract AI text response for better user experience
+        aiText = response.data?.text || '';
         thinkingProcess = convertThinkingData(response.data?.thinkingProcess);
-        console.log('[AI] route:code', { length: code?.length, hasThinking: !!thinkingProcess });
+        console.log('[AI] route:code', { length: code?.length, hasThinking: !!thinkingProcess, hasText: !!aiText });
       } catch (apiErr) {
         console.warn('AI generation failed (backend unavailable or error).', apiErr);
         const likelyVis = isLikelyVisualization(text);
@@ -1328,9 +1941,29 @@ try {
         console.log('[ChatPanel] Saved visualization code to session:', activeSessionId);
       }
 
+      // Determine message content: prefer AI text, then a descriptive message if code exists, otherwise loading message
+      let messageContent = aiText;
+      if (!messageContent && code && code.trim()) {
+        // Code was generated, provide a descriptive message
+        const request = text.toLowerCase().trim();
+        const subjectMatch = request.match(/(?:show|display|visualize|view|load|open|see)\s+(.+?)(?:\s|$)/i);
+        const subject = subjectMatch ? subjectMatch[1].trim() : request;
+        const cleanSubject = subject.replace(/\s+(structure|protein|molecule|chain|helix)$/i, '').trim();
+        if (cleanSubject && cleanSubject.length < 40 && cleanSubject.length > 0) {
+          const capitalized = cleanSubject.charAt(0).toUpperCase() + cleanSubject.slice(1);
+          messageContent = `Visualizing ${capitalized}...`;
+        } else {
+          messageContent = 'Visualizing structure...';
+        }
+      }
+      if (!messageContent) {
+        // Last resort: use the loading message
+        messageContent = getExecutionMessage(text);
+      }
+
       const aiResponse: ExtendedMessage = {
         id: uuidv4(),
-        content: `Generated code for: "${text}". Executing...`,
+        content: messageContent,
         type: 'ai',
         timestamp: new Date()
       };
@@ -1391,13 +2024,13 @@ try {
   return (
     <div className="h-full flex flex-col">
       {!showCenteredLayout && (
-        <div className="p-4 border-b border-gray-200">
+        <div className="px-3 py-1.5 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center space-x-2">
-            <Sparkles className="w-5 h-5 text-blue-600" />
+            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">AI Assistant</h2>
+              <h2 className="text-xs font-semibold text-gray-900">AI Assistant</h2>
               {activeSession && (
-                <p className="text-xs text-gray-500 truncate max-w-[200px]">
+                <p className="text-[10px] text-gray-500 truncate max-w-[180px]">
                   {activeSession.title}
                 </p>
               )}
@@ -1407,14 +2040,14 @@ try {
       )}
 
       {!showCenteredLayout ? (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-3 py-1.5 space-y-2 min-h-0">
           {messages.map((message) => (
           <div
             key={message.id}
             className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[80%] p-3 rounded-lg ${
+              className={`max-w-[85%] p-2 rounded-lg ${
                 message.type === 'user'
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-900'
@@ -1430,7 +2063,26 @@ try {
                     />
                   )}
                   {renderMessageContent(message.content)}
+                  {/* Show uploaded file attachment if the most recent user message before this AI message had one */}
+                  {(() => {
+                    const messageIndex = messages.findIndex(m => m.id === message.id);
+                    if (messageIndex < 0) return null;
+                    
+                    // Find the most recent user message before this AI message
+                    for (let i = messageIndex - 1; i >= 0; i--) {
+                      const prevMsg = messages[i];
+                      if (prevMsg.type === 'user' && prevMsg.uploadedFile && isValidUploadedFile(prevMsg.uploadedFile)) {
+                        return (
+                          <div className="mt-3">
+                            {renderFileAttachment(prevMsg.uploadedFile, false)}
+                          </div>
+                        );
+                      }
+                    }
+                    return null;
+                  })()}
                   {renderAlphaFoldResult(message.alphafoldResult)}
+                  {renderRFdiffusionResult(message.rfdiffusionResult)}
                   {renderProteinMPNNResult(message.proteinmpnnResult)}
                   {message.error && (
                     <div className="mt-3">
@@ -1450,9 +2102,16 @@ try {
                   )}
                 </>
               ) : (
-                <p className="text-sm">{message.content}</p>
+                <>
+                  <p className="text-sm leading-relaxed">{message.content}</p>
+                  {message.uploadedFile && isValidUploadedFile(message.uploadedFile) && (
+                    <div className="mt-1.5">
+                      {renderFileAttachment(message.uploadedFile, true)}
+                    </div>
+                  )}
+                </>
               )}
-              <div className="text-xs mt-1 opacity-70">
+              <div className="text-[10px] mt-0.5 opacity-60">
                 {new Date(message.timestamp).toLocaleTimeString()}
               </div>
             </div>
@@ -1460,11 +2119,11 @@ try {
         ))}
         {isLoading && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 p-3 rounded-lg">
-              <div className="flex space-x-2">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+            <div className="bg-gray-100 p-2 rounded-lg">
+              <div className="flex space-x-1.5">
+                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
+                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
               </div>
             </div>
           </div>
@@ -1480,12 +2139,12 @@ try {
         </div>
       )}
 
-      <div className={`p-4 ${!showCenteredLayout ? 'border-t border-gray-200' : ''}`}>
+      <div className={`px-3 py-1.5 flex-shrink-0 ${!showCenteredLayout ? 'border-t border-gray-200' : ''}`}>
         {/* Multiple selection chips */}
         {selections.length > 0 && (
-          <div className="mb-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-xs text-gray-500 font-medium">
+          <div className="mb-1.5">
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[10px] text-gray-500 font-medium">
                 Selected Residues ({selections.length})
               </div>
               {selections.length > 1 && (
@@ -1519,47 +2178,165 @@ try {
         <ProgressTracker
           isVisible={alphafoldProgress.isVisible}
           onCancel={alphafoldProgress.cancelProgress}
-          className="mb-3"
+          className="mb-1.5"
           title={alphafoldProgress.title}
           eventName={alphafoldProgress.eventName}
         />
         <ProgressTracker
           isVisible={proteinmpnnProgress.isVisible}
           onCancel={proteinmpnnProgress.cancelProgress}
-          className="mb-3"
+          className="mb-1.5"
           title={proteinmpnnProgress.title}
           eventName={proteinmpnnProgress.eventName}
         />
+        <ProgressTracker
+          isVisible={rfdiffusionProgress.isVisible}
+          onCancel={rfdiffusionProgress.cancelProgress}
+          className="mb-1.5"
+          title={rfdiffusionProgress.title}
+          eventName={rfdiffusionProgress.eventName}
+        />
 
         {!showCenteredLayout && (
-          <div className="mb-3">
-            <div className="text-xs text-gray-500 mb-2">Quick start:</div>
-            <div className="flex flex-wrap gap-2">
-              {quickPrompts.map((prompt, index) => (
-                <button
-                  key={index}
-                  onClick={() => setInput(prompt)}
-                  className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded"
-                >
-                  {prompt}
-                </button>
-              ))}
+          <div className="mb-1.5">
+            <button
+              onClick={() => setIsQuickStartExpanded(!isQuickStartExpanded)}
+              className="flex items-center justify-between w-full text-[10px] text-gray-500 hover:text-gray-700 transition-colors mb-1"
+            >
+              <span>Quick start:</span>
+              {isQuickStartExpanded ? (
+                <ChevronUp className="w-2.5 h-2.5" />
+              ) : (
+                <ChevronDown className="w-2.5 h-2.5" />
+              )}
+            </button>
+            <div
+              className={`overflow-hidden transition-all duration-200 ease-in-out ${
+                isQuickStartExpanded ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'
+              }`}
+            >
+              <div className="flex flex-wrap gap-1">
+                {quickPrompts.map((prompt, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setInput(prompt)}
+                    className="text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded transition-colors"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className={`flex flex-col gap-2 ${showCenteredLayout ? 'max-w-2xl w-full mx-auto' : ''}`}>
-          {/* Large text input area */}
-          <div className="relative">
+          {/* File uploads display with status */}
+          {fileUploads.length > 0 && (
+            <div className="flex items-center space-x-1.5 px-2 py-1 bg-blue-50 border border-blue-200 rounded-lg flex-wrap gap-1.5 mb-1.5">
+              {fileUploads.map((fileState) => {
+                const isUploading = fileState.status === 'uploading';
+                const isUploaded = fileState.status === 'uploaded';
+                const isError = fileState.status === 'error';
+                
+                return (
+                  <div 
+                    key={fileState.id} 
+                    className={`flex items-center space-x-1 px-2 py-1 rounded-md border ${
+                      isUploading 
+                        ? 'bg-yellow-50 border-yellow-300' 
+                        : isUploaded 
+                        ? 'bg-green-50 border-green-300' 
+                        : isError
+                        ? 'bg-red-50 border-red-300'
+                        : 'bg-white border-blue-200'
+                    }`}
+                  >
+                    {isUploading && (
+                      <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-1"></div>
+                    )}
+                    {isUploaded && (
+                      <span className="text-green-600 mr-1">✓</span>
+                    )}
+                    {isError && (
+                      <span className="text-red-600 mr-1">✗</span>
+                    )}
+                    <span 
+                      className={`text-xs truncate max-w-[200px] ${
+                        isUploading 
+                          ? 'text-yellow-700' 
+                          : isUploaded 
+                          ? 'text-green-700' 
+                          : isError
+                          ? 'text-red-700'
+                          : 'text-blue-700'
+                      }`} 
+                      title={fileState.fileInfo?.filename || fileState.file.name}
+                    >
+                      📎 {fileState.fileInfo?.filename || fileState.file.name}
+                      {isUploaded && fileState.fileInfo && (
+                        <span className="ml-1 text-[10px] opacity-75">
+                          ({fileState.fileInfo.size > 0 ? `${(fileState.fileInfo.size / 1024).toFixed(1)} KB` : ''})
+                        </span>
+                      )}
+                    </span>
+                    {isError && fileState.error && (
+                      <span className="text-xs text-red-600 ml-1" title={fileState.error}>
+                        ⚠
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFileUploads(prev => prev.filter(item => item.id !== fileState.id));
+                        setUploadError(null);
+                      }}
+                      className={`p-0.5 rounded ml-1 ${
+                        isUploading 
+                          ? 'hover:bg-yellow-100' 
+                          : isUploaded 
+                          ? 'hover:bg-green-100' 
+                          : isError
+                          ? 'hover:bg-red-100'
+                          : 'hover:bg-blue-100'
+                      }`}
+                      title="Remove file"
+                    >
+                      <X className={`w-3 h-3 ${
+                        isUploading 
+                          ? 'text-yellow-600' 
+                          : isUploaded 
+                          ? 'text-green-600' 
+                          : isError
+                          ? 'text-red-600'
+                          : 'text-blue-600'
+                      }`} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          
+          {/* Upload error display */}
+          {uploadError && (
+            <div className="px-2 py-1 bg-red-50 border border-red-200 rounded-lg mb-1.5">
+              <p className="text-[10px] text-red-700">{uploadError}</p>
+            </div>
+          )}
+          
+          {/* Large text input area with integrated controls */}
+          <div className="relative bg-white border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent">
+            {/* Textarea with padding for controls */}
             <textarea
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={"Chat, visualize, or build..."}
-              className={`w-full px-4 py-3 bg-white text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm placeholder-gray-400 resize-none ${
-                showCenteredLayout ? 'min-h-[120px] text-base' : 'min-h-[100px]'
-              }`}
-              rows={showCenteredLayout ? 4 : 3}
+              className={`w-full bg-transparent text-gray-900 focus:outline-none text-sm placeholder-gray-400 resize-none ${
+                showCenteredLayout ? 'min-h-[120px] text-base' : 'min-h-[60px]'
+              } px-2.5 pb-8 pt-2`}
+              rows={showCenteredLayout ? 4 : 1}
               disabled={isLoading}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -1568,50 +2345,71 @@ try {
                 }
               }}
             />
-          
-          </div>
-          
-          {/* Bottom row: Agent, Model selectors, Microphone, and Send button */}
-          <div className="flex items-center gap-2">
-            {/* Agent Selector */}
-            {agents.length > 0 && (
-              <AgentSelector
-                agents={agents}
-              />
-            )}
             
-            {/* Model Selector */}
-            <ModelSelector
-              models={models}
-            />
-            
-            {/* Spacer */}
-            <div className="flex-1" />
-            
-            {/* Microphone button */}
-            <button
-              type="button"
-              className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-              title="Voice input"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
-            </button>
-            
-            {/* Send button */}
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              className={`flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                showCenteredLayout 
-                  ? 'p-2 text-gray-400 hover:text-gray-600' 
-                  : 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700'
-              }`}
-              title="Send"
-            >
-              <Send className="w-5 h-5" />
-            </button>
+            {/* Bottom controls bar: Agent, Model selectors, Microphone, and Send button */}
+            <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between gap-1.5 px-2 py-1 border-t border-gray-100 bg-white rounded-b-lg z-10">
+              {/* Leading actions: Agent and Model selectors */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Agent Selector */}
+                {agents.length > 0 && (
+                  <AgentSelector
+                    agents={agents}
+                  />
+                )}
+                
+                {/* Model Selector */}
+                <ModelSelector
+                  models={models}
+                />
+              </div>
+              
+              {/* Trailing actions: Attachment, Microphone, and Send button */}
+              <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
+                {/* File upload attachment button */}
+                <AttachmentMenu
+                  onFileSelected={(file) => {
+                    handleFileSelected(file);
+                    setUploadError(null);
+                  }}
+                  onFilesSelected={(files) => {
+                    handleFilesSelected(files);
+                    setUploadError(null);
+                  }}
+                  onFileCleared={() => {
+                    setFileUploads([]);
+                    setUploadError(null);
+                  }}
+                  onError={(error) => {
+                    setUploadError(error);
+                    console.error('File upload error:', error);
+                  }}
+                  disabled={isLoading}
+                  pendingFiles={fileUploads.map(f => f.file)}
+                  sessionId={activeSessionId}
+                />
+                
+                {/* Microphone button */}
+                <button
+                  type="button"
+                  className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
+                  title="Voice input"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                </button>
+                
+                {/* Send button */}
+                <button
+                  type="submit"
+                  disabled={!input.trim() || isLoading}
+                  className="flex items-center justify-center p-1.5 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed rounded-md hover:bg-gray-100"
+                  title="Send"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
           </div>
         </form>
 

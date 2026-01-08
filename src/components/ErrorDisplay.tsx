@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, AlertCircle, RefreshCw, ExternalLink, MessageCircle, Wrench } from 'lucide-react';
-import { ErrorDetails, ErrorSeverity, AlphaFoldErrorHandler } from '../utils/errorHandler';
+import { ErrorDetails, ErrorSeverity, AlphaFoldErrorHandler, RFdiffusionErrorHandler } from '../utils/errorHandler';
 
 interface ErrorDisplayProps {
   error: ErrorDetails;
@@ -17,6 +17,37 @@ export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({
 }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
+
+  // Determine error type from error code or context
+  const getErrorType = (): { name: string; handler: typeof AlphaFoldErrorHandler | typeof RFdiffusionErrorHandler } => {
+    // Check error code prefix
+    if (error.code.startsWith('RFDIFFUSION_')) {
+      return { name: 'RFdiffusion Error', handler: RFdiffusionErrorHandler };
+    }
+    
+    // Check context feature field
+    if (error.context?.feature === 'RFdiffusion') {
+      return { name: 'RFdiffusion Error', handler: RFdiffusionErrorHandler };
+    }
+    
+    if (error.context?.feature === 'AlphaFold' || error.context?.feature === 'AlphaFold2') {
+      return { name: 'AlphaFold Error', handler: AlphaFoldErrorHandler };
+    }
+    
+    // Check job ID prefix (rf_ for RFdiffusion, af_ for AlphaFold)
+    if (error.context?.jobId?.startsWith('rf_')) {
+      return { name: 'RFdiffusion Error', handler: RFdiffusionErrorHandler };
+    }
+    
+    if (error.context?.jobId?.startsWith('af_')) {
+      return { name: 'AlphaFold Error', handler: AlphaFoldErrorHandler };
+    }
+    
+    // Default to AlphaFold for backward compatibility
+    return { name: 'AlphaFold Error', handler: AlphaFoldErrorHandler };
+  };
+
+  const errorType = getErrorType();
 
   const getSeverityColor = (severity: ErrorSeverity) => {
     switch (severity) {
@@ -73,7 +104,7 @@ export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({
       onRetry();
     } else if (suggestion.type === 'contact') {
       // Could open a support modal or email client
-      window.open('mailto:support@example.com?subject=AlphaFold Error Report&body=' + encodeURIComponent(
+      window.open('mailto:support@example.com?subject=' + encodeURIComponent(`${errorType.name} Report`) + '&body=' + encodeURIComponent(
         `Error Code: ${error.code}\nTimestamp: ${error.timestamp}\nDetails: ${error.technicalMessage}`
       ));
     }
@@ -92,10 +123,10 @@ export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center space-x-2">
               <h4 className={`font-medium ${getSeverityTextColor(error.severity)}`}>
-                AlphaFold Error
+                {errorType.name}
               </h4>
               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityBadgeColor(error.severity)}`}>
-                {AlphaFoldErrorHandler.getSeverityIcon(error.severity)} {error.severity.toUpperCase()}
+                {errorType.handler.getSeverityIcon(error.severity)} {error.severity.toUpperCase()}
               </span>
             </div>
             

@@ -34,7 +34,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ onFileSelect }) => {
       // Note: api.get('/files') will become /api/files since baseURL includes /api
       const response = await api.get(`/files`);
       console.log('[FileBrowser] Response:', response.data);
-      if (response.data.status === 'success') {
+      if (response.data && response.data.status === 'success') {
         const files = response.data.files || [];
         console.log('[FileBrowser] Loaded files:', files.length, files);
         setFiles(files);
@@ -46,9 +46,18 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ onFileSelect }) => {
       console.error('[FileBrowser] Failed to load user files:', error);
       if (error.response) {
         console.error('[FileBrowser] Error response:', error.response.status, error.response.data);
-      }
-      if (error.response?.status === 404) {
-        console.warn('[FileBrowser] User files endpoint not found - server may need restart');
+        if (error.response.status === 401) {
+          console.error('[FileBrowser] Authentication failed - user may need to log in again');
+        } else if (error.response.status === 404) {
+          console.warn('[FileBrowser] User files endpoint not found - server may need restart');
+        } else if (error.response.status === 500) {
+          console.error('[FileBrowser] Server error:', error.response.data);
+        }
+      } else if (error.request) {
+        console.error('[FileBrowser] No response received - server may be down or endpoint not accessible');
+        console.error('[FileBrowser] Request URL:', error.config?.url);
+      } else {
+        console.error('[FileBrowser] Error setting up request:', error.message);
       }
       setFiles([]);
     } finally {
@@ -128,18 +137,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ onFileSelect }) => {
       window.dispatchEvent(new CustomEvent('session-file-deleted', { detail: { file_id: file.file_id } }));
     } catch (error: any) {
       console.error('[FileBrowser] Failed to delete file:', error);
-      // If generic endpoint doesn't exist, try session endpoint as fallback
-      if (error.response?.status === 404 && activeSessionId) {
-        try {
-          await api.delete(`/sessions/${activeSessionId}/files/${file.file_id}`);
-          await loadFiles();
-          window.dispatchEvent(new CustomEvent('session-file-deleted', { detail: { file_id: file.file_id } }));
-        } catch (fallbackError: any) {
-          alert(`Failed to delete file: ${fallbackError.response?.data?.error || fallbackError.message}`);
-        }
-      } else {
-        alert(`Failed to delete file: ${error.response?.data?.error || error.message}`);
-      }
+      alert(`Failed to delete file: ${error.response?.data?.error || error.response?.data?.detail || error.message}`);
     } finally {
       setDeletingFileId(null);
     }

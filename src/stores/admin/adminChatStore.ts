@@ -239,8 +239,9 @@ export const useAdminChatStore = create<AdminChatState>((set, get) => ({
     set({ privacyMode: enabled });
     // Reload current data with new privacy mode
     get().loadMessages(true);
-    if (get().selectedSession) {
-      get().loadSessionMessages(get().selectedSession.id);
+    const selectedSession = get().selectedSession;
+    if (selectedSession) {
+      get().loadSessionMessages(selectedSession.id);
     }
   },
 

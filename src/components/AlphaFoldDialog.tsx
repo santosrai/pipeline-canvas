@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ErrorDisplay, ErrorSummary } from './ErrorDisplay';
+import { ErrorDisplay } from './ErrorDisplay';
 import { AlphaFoldErrorHandler } from '../utils/errorHandler';
 
 interface AlphaFoldParameters {

@@ -12,7 +12,7 @@ export const Pagination: React.FC<PaginationProps> = ({
   hasMore,
   loading,
   onLoadMore,
-  limit,
+  limit: _limit,
   totalShown,
 }) => {
   if (!hasMore && (!totalShown || totalShown === 0)) {

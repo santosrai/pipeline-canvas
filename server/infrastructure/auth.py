@@ -17,14 +17,35 @@ REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 def hash_password(password: str) -> str:
     """Hash password using bcrypt."""
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    password_bytes = password.encode("utf-8")
+    salt = bcrypt.gensalt()
+    hash_bytes = bcrypt.hashpw(password_bytes, salt)
+    # Return as string for database storage
+    return hash_bytes.decode("utf-8")
 
 
 def verify_password(password: str, hashed: str) -> bool:
     """Verify password against hash."""
     try:
-        return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
-    except Exception:
+        if not password or not hashed:
+            return False
+        
+        # Ensure both are bytes for bcrypt
+        password_bytes = password.encode("utf-8")
+        
+        # Check if hash is already bytes or needs encoding
+        if isinstance(hashed, bytes):
+            hash_bytes = hashed
+        else:
+            hash_bytes = hashed.encode("utf-8")
+        
+        return bcrypt.checkpw(password_bytes, hash_bytes)
+    except Exception as e:
+        # Log the exception for debugging (but don't expose it to user)
+        import traceback
+        print(f"[DEBUG] Password verification error: {e}")
+        print(f"[DEBUG] Hash type: {type(hashed)}, Hash length: {len(hashed) if hashed else 0}")
+        traceback.print_exc()
         return False
 
 

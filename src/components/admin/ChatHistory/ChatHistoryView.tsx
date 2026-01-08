@@ -5,7 +5,6 @@ import { MessageTable } from './MessageTable';
 import { ChatFilters } from './ChatFilters';
 import { PrivacyModeToggle } from './PrivacyModeToggle';
 import { Pagination } from '../shared/Pagination';
-import { SearchBar } from '../shared/SearchBar';
 
 export const ChatHistoryView: React.FC = () => {
   const {

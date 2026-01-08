@@ -4,6 +4,7 @@ import { PipelineNodeBlueprint } from '../components/pipeline-canvas';
 import { useChatHistoryStore } from '../stores/chatHistoryStore';
 import { useAppStore } from '../stores/appStore';
 import { CodeExecutor } from '../utils/codeExecutor';
+import { getAuthHeaders } from '../utils/api';
 
 interface NodeParameterConfigProps {
   node: PipelineNodeBlueprint;

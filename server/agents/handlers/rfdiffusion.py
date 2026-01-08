@@ -454,10 +454,13 @@ class RFdiffusionHandler:
                 if pdb_content:
                     # Save PDB file using user-scoped storage
                     user_id = job_data.get("userId")
+                    logger.info(f"[RFdiffusion Handler] Saving file for job {job_id}, userId from job_data: {user_id}")
                     if not user_id:
+                        logger.error(f"[RFdiffusion Handler] CRITICAL: No userId provided in job_data! Keys: {list(job_data.keys())}")
                         logger.warning("[RFdiffusion Handler] No userId provided, cannot save file with user isolation")
                         user_id = "system"  # Fallback for backward compatibility
                     
+                    logger.info(f"[RFdiffusion Handler] Using user_id: {user_id} for file save")
                     filename = f"rfdiffusion_{job_id}.pdb"
                     filepath = save_result_file(
                         user_id=user_id,
@@ -504,6 +507,7 @@ class RFdiffusionHandler:
                         "status": "success",
                         "data": {
                             "pdbContent": pdb_content,
+                            "fileId": job_id,  # File ID for frontend to load from server
                             "filename": filename,
                             "filepath": filepath,
                             "metadata": {

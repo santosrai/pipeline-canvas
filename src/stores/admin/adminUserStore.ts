@@ -159,12 +159,12 @@ export const useAdminUserStore = create<AdminUserState>((set, get) => ({
     }
   },
 
-  loadUserChat: async (userId: string, reset = false) => {
+  loadUserChat: async (_userId: string, _reset = false) => {
     // This will be handled by adminChatStore
     // Placeholder for now
   },
 
-  loadUserTokens: async (userId: string, reset = false) => {
+  loadUserTokens: async (_userId: string, _reset = false) => {
     // This will be handled by adminTokenStore
     // Placeholder for now
   },

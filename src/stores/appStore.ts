@@ -93,7 +93,7 @@ export const useAppStore = create<AppState>()(
       lastLoadedPdb: null,
       pendingCodeToRun: null,
       selections: [],
-      chatPanelWidth: 400, // Default chat panel width
+      chatPanelWidth: 400, // Default chat panel width (~1/3 of typical screen)
       isViewerVisible: false, // Hidden by default for new chats
       currentStructureOrigin: null,
       selectedFile: null,

@@ -90,6 +90,29 @@ The application can load structures from:
 
 ## Development
 
+### Authentication & API Requests
+
+**⚠️ IMPORTANT:** All API endpoints (except auth endpoints) require JWT authentication. When making API requests from the frontend:
+
+- **Use `api` instance** for standard requests (automatic auth):
+  ```typescript
+  import { api } from '../utils/api';
+  const response = await api.post('/endpoint', data);
+  ```
+
+- **Use `getAuthHeaders()` for `fetch()` calls** (file uploads, etc.):
+  ```typescript
+  import { getAuthHeaders } from '../utils/api';
+  const headers = getAuthHeaders();
+  const response = await fetch('/api/upload/pdb', {
+    method: 'POST',
+    headers,  // Required for authentication
+    body: formData,
+  });
+  ```
+
+See **[docs/AUTHENTICATION_GUIDE.md](docs/AUTHENTICATION_GUIDE.md)** for complete authentication documentation, common patterns, and troubleshooting.
+
 ### AI Code Generation (OpenRouter)
 
 This app can generate Mol* builder code from natural language via a lightweight server that calls the OpenRouter API.

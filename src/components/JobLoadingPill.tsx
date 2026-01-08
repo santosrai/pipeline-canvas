@@ -29,7 +29,7 @@ export const JobLoadingPill: React.FC<JobLoadingPillProps> = ({
 
     const poller = new JobPoller({
       jobId: message.jobId,
-      jobType: message.jobType || 'alphafold',
+      jobType: (message.jobType === 'proteinmpnn' ? 'alphafold' : message.jobType) || 'alphafold',
       enableWebSocket: true,
       maxPollTime: 7200, // 2 hours
       onUpdate: (jobStatus: JobStatus) => {

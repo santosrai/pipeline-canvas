@@ -783,4 +783,24 @@ export class RFdiffusionErrorHandler {
     // Generic error fallback
     return this.createError('UNKNOWN_ERROR', context, errorMessage, error?.stack);
   }
+
+  static getSeverityColor(severity: ErrorSeverity): string {
+    switch (severity) {
+      case ErrorSeverity.LOW: return 'text-yellow-700';
+      case ErrorSeverity.MEDIUM: return 'text-orange-700';
+      case ErrorSeverity.HIGH: return 'text-red-700';
+      case ErrorSeverity.CRITICAL: return 'text-red-900';
+      default: return 'text-gray-700';
+    }
+  }
+
+  static getSeverityIcon(severity: ErrorSeverity): string {
+    switch (severity) {
+      case ErrorSeverity.LOW: return '⚠️';
+      case ErrorSeverity.MEDIUM: return '🔶';
+      case ErrorSeverity.HIGH: return '🔴';
+      case ErrorSeverity.CRITICAL: return '💥';
+      default: return 'ℹ️';
+    }
+  }
 }

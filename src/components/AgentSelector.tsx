@@ -74,8 +74,8 @@ export const AgentSelector: React.FC<AgentSelectorProps> = ({ agents, onAgentCha
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-2 w-64 sm:w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-[100] max-h-96 overflow-y-auto">
-          <div className="p-2">
+        <div className="absolute bottom-full left-0 mb-2 w-64 sm:w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-[100] max-h-96 overflow-hidden flex flex-col">
+          <div className="p-2 overflow-y-auto flex-1 min-h-0">
             {/* Auto option */}
             <button
               onClick={() => handleSelect(null)}

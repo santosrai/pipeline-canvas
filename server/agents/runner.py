@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, AsyncGenerator
 
 try:
-    from ..infrastructure.utils import log_line, get_text_from_completion, strip_code_fences, trim_history
+    from ..infrastructure.utils import log_line, get_text_from_completion, strip_code_fences, trim_history, extract_code_and_text
     from ..infrastructure.safety import violates_whitelist, ensure_clear_on_change
     from ..domain.protein.uniprot import search_uniprot
 except ImportError:
-    from infrastructure.utils import log_line, get_text_from_completion, strip_code_fences, trim_history
+    from infrastructure.utils import log_line, get_text_from_completion, strip_code_fences, trim_history, extract_code_and_text
     from infrastructure.safety import violates_whitelist, ensure_clear_on_change
     from domain.protein.uniprot import search_uniprot
 
@@ -929,6 +929,33 @@ async def run_agent(
         return {"type": "text", "text": text}
 
     if agent.get("kind") == "code":
+        # Extract PDB ID and structure metadata from current code for better context
+        import re
+        code_pdb_id = None
+        structure_metadata = ""
+        
+        if current_code and str(current_code).strip():
+            # Extract PDB ID from loadStructure calls
+            pdb_match = re.search(r"loadStructure\s*\(\s*['\"]([0-9A-Za-z]{4})['\"]", str(current_code))
+            if pdb_match:
+                code_pdb_id = pdb_match.group(1).upper()
+                structure_metadata = f"\n\nStructure Context: The current code loads PDB ID {code_pdb_id}. "
+                # Extract representation types and colors for context
+                representations = []
+                if re.search(r"addCartoonRepresentation", str(current_code)):
+                    color_match = re.search(r"color:\s*['\"]([^'\"]+)['\"]", str(current_code))
+                    color = color_match.group(1) if color_match else "default"
+                    representations.append(f"cartoon ({color})")
+                if re.search(r"addBallAndStickRepresentation", str(current_code)):
+                    representations.append("ball-and-stick")
+                if re.search(r"addSurfaceRepresentation", str(current_code)):
+                    representations.append("surface")
+                if re.search(r"highlightLigands", str(current_code)):
+                    representations.append("ligands highlighted")
+                if representations:
+                    structure_metadata += f"Current representations: {', '.join(representations)}. "
+                structure_metadata += "When generating your response, confirm what structure is being loaded and explain what visual elements will be shown."
+        
         # Include uploaded file context if available
         uploaded_file_info = ""
         if uploaded_file_context:
@@ -939,21 +966,30 @@ async def run_agent(
             uploaded_file_info = f"\n\nIMPORTANT: User has uploaded a PDB file ({filename}, {atoms} atoms, chains: {', '.join(chains) if chains else 'N/A'}). "
             uploaded_file_info += f"To load this file, use: await builder.loadStructure('{file_url}');\n"
             uploaded_file_info += "The file is available at the API endpoint shown above. Use this URL instead of a PDB ID.\n"
+            if not structure_metadata:
+                structure_metadata = f"\n\nStructure Context: User has uploaded a PDB file '{filename}' ({atoms} atoms, {len(chains)} chain{'s' if len(chains) != 1 else ''}). "
+                structure_metadata += "When generating your response, confirm what structure is being loaded and explain what visual elements will be shown."
         
         context_prefix = (
             f"You may MODIFY the existing Molstar builder code below to satisfy the new request. Prefer editing in-place if it does not change the loaded PDB. Always return the full updated code.\n\n"
-            f"Existing code:\n\n```js\n{str(current_code)}\n```\n\nRequest: {user_text}{uploaded_file_info}"
+            f"Existing code:\n\n```js\n{str(current_code)}\n```\n\nRequest: {user_text}{uploaded_file_info}{structure_metadata}"
             if current_code and str(current_code).strip()
-            else f"Generate Molstar builder code for: {user_text}{uploaded_file_info}"
+            else f"Generate Molstar builder code for: {user_text}{uploaded_file_info}{structure_metadata}"
         )
 
-        prior_dialogue = (
-            "\n\nRecent context: "
-            + " | ".join(f"{m.get('type')}: {m.get('content')}" for m in (history or [])[-4:])
-            if history
-            else ""
-        )
-
+        # Build proper conversation history for context awareness
+        # Convert history to proper message format so AI understands previous conversation
+        conversation_history = []
+        if history:
+            for msg in history[-6:]:  # Last 6 messages for better context
+                msg_type = msg.get('type', '')
+                msg_content = msg.get('content', '')
+                if msg_type == 'user':
+                    conversation_history.append({"role": "user", "content": msg_content})
+                elif msg_type == 'ai':
+                    # Include full AI response content so AI understands what it previously suggested
+                    conversation_history.append({"role": "assistant", "content": msg_content})
+        
         # Enhanced system prompt with RAG for MVS agent
         system_prompt = agent.get("system")
         if agent.get("id") == "mvs-builder":
@@ -971,21 +1007,24 @@ async def run_agent(
         # Map model ID to OpenRouter format
         openrouter_model = _map_model_id(model)
         
-        # Prepare messages with system prompt
+        # Prepare messages with system prompt, conversation history, and current request
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": context_prefix + prior_dialogue})
+        # Add conversation history for context awareness
+        messages.extend(conversation_history)
+        # Add current request with context
+        messages.append({"role": "user", "content": context_prefix})
         
         log_line("agent:code:req", {**base_log, "hasCurrentCode": bool(current_code and str(current_code).strip()), "userText": user_text})
         completion = _call_openrouter_api(
             model=openrouter_model,
             messages=messages,
-            max_tokens=800,
+            max_tokens=1200,
             temperature=0.2,
         )
         content_text = get_text_from_completion(completion)
-        code = strip_code_fences(content_text)
+        code, explanation_text = extract_code_and_text(content_text)
         final_completion = completion  # Track which completion to use for thinking data
 
         # Safety pass
@@ -1003,18 +1042,22 @@ async def run_agent(
             completion2 = _call_openrouter_api(
                 model=openrouter_model,
                 messages=safety_messages,
-                max_tokens=800,
+                max_tokens=1200,
                 temperature=0.2,
             )
-            code = strip_code_fences(get_text_from_completion(completion2))
+            content_text2 = get_text_from_completion(completion2)
+            code, explanation_text = extract_code_and_text(content_text2)
             final_completion = completion2  # Use the safety pass completion for thinking data
 
         code = ensure_clear_on_change(current_code, code)
-        log_line("agent:code:res", {"length": len(code)})
+        log_line("agent:code:res", {"length": len(code), "has_text": bool(explanation_text)})
         
         # Extract thinking data if available (from final completion)
         thinking_process = _parse_thinking_data(final_completion)
         result = {"type": "code", "code": code}
+        # Include text explanation if available
+        if explanation_text:
+            result["text"] = explanation_text
         if thinking_process:
             result["thinkingProcess"] = thinking_process
         return result
@@ -1175,6 +1218,11 @@ async def run_agent(
                         f"Recent AlphaFold2 prediction: {result.get('filename', 'unknown')}"
                     )
 
+    # Detect if user input is a greeting or conversational (not asking about structure)
+    user_text_lower = user_text.lower().strip()
+    greeting_patterns = ["hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening", "thanks", "thank you", "ok", "okay"]
+    is_greeting = any(pattern in user_text_lower for pattern in greeting_patterns) and len(user_text.strip()) < 30
+    
     messages: List[Dict[str, Any]] = []
     context_parts = []
     if uploaded_file_info:
@@ -1183,7 +1231,9 @@ async def run_agent(
         context_parts.append("Recent Structure Generation History:\n" + "\n".join(history_context_lines))
     if selection_context:
         context_parts.append(selection_context)
-    if code_context:
+    # Only include code/structure context if user is NOT just greeting
+    # For greetings, skip structure context to avoid describing structures unnecessarily
+    if code_context and not is_greeting:
         context_parts.append(code_context)
     
     if context_parts:
@@ -1313,6 +1363,33 @@ async def run_agent_stream(
     # Handle code agents
     if agent_kind == "code":
         try:
+            # Extract PDB ID and structure metadata from current code for better context
+            import re
+            code_pdb_id = None
+            structure_metadata = ""
+            
+            if current_code and str(current_code).strip():
+                # Extract PDB ID from loadStructure calls
+                pdb_match = re.search(r"loadStructure\s*\(\s*['\"]([0-9A-Za-z]{4})['\"]", str(current_code))
+                if pdb_match:
+                    code_pdb_id = pdb_match.group(1).upper()
+                    structure_metadata = f"\n\nStructure Context: The current code loads PDB ID {code_pdb_id}. "
+                    # Extract representation types and colors for context
+                    representations = []
+                    if re.search(r"addCartoonRepresentation", str(current_code)):
+                        color_match = re.search(r"color:\s*['\"]([^'\"]+)['\"]", str(current_code))
+                        color = color_match.group(1) if color_match else "default"
+                        representations.append(f"cartoon ({color})")
+                    if re.search(r"addBallAndStickRepresentation", str(current_code)):
+                        representations.append("ball-and-stick")
+                    if re.search(r"addSurfaceRepresentation", str(current_code)):
+                        representations.append("surface")
+                    if re.search(r"highlightLigands", str(current_code)):
+                        representations.append("ligands highlighted")
+                    if representations:
+                        structure_metadata += f"Current representations: {', '.join(representations)}. "
+                    structure_metadata += "When generating your response, confirm what structure is being loaded and explain what visual elements will be shown."
+            
             # Include uploaded file context if available
             uploaded_file_info = ""
             if uploaded_file_context:
@@ -1323,21 +1400,29 @@ async def run_agent_stream(
                 uploaded_file_info = f"\n\nIMPORTANT: User has uploaded a PDB file ({filename}, {atoms} atoms, chains: {', '.join(chains) if chains else 'N/A'}). "
                 uploaded_file_info += f"To load this file, use: await builder.loadStructure('{file_url}');\n"
                 uploaded_file_info += "The file is available at the API endpoint shown above. Use this URL instead of a PDB ID.\n"
+                if not structure_metadata:
+                    structure_metadata = f"\n\nStructure Context: User has uploaded a PDB file '{filename}' ({atoms} atoms, {len(chains)} chain{'s' if len(chains) != 1 else ''}). "
+                    structure_metadata += "When generating your response, confirm what structure is being loaded and explain what visual elements will be shown."
             
             # Build context similar to run_agent for code agents
             context_prefix = (
                 f"You may MODIFY the existing Molstar builder code below to satisfy the new request. Prefer editing in-place if it does not change the loaded PDB. Always return the full updated code.\n\n"
-                f"Existing code:\n\n```js\n{str(current_code)}\n```\n\nRequest: {user_text}{uploaded_file_info}"
+                f"Existing code:\n\n```js\n{str(current_code)}\n```\n\nRequest: {user_text}{uploaded_file_info}{structure_metadata}"
                 if current_code and str(current_code).strip()
-                else f"Generate Molstar builder code for: {user_text}{uploaded_file_info}"
+                else f"Generate Molstar builder code for: {user_text}{uploaded_file_info}{structure_metadata}"
             )
 
-            prior_dialogue = (
-                "\n\nRecent context: "
-                + " | ".join(f"{m.get('type')}: {m.get('content')}" for m in (history or [])[-4:])
-                if history
-                else ""
-            )
+            # Build proper conversation history for context awareness (streaming path)
+            conversation_history = []
+            if history:
+                for msg in history[-6:]:  # Last 6 messages for better context
+                    msg_type = msg.get('type', '')
+                    msg_content = msg.get('content', '')
+                    if msg_type == 'user':
+                        conversation_history.append({"role": "user", "content": msg_content})
+                    elif msg_type == 'ai':
+                        # Include full AI response content so AI understands what it previously suggested
+                        conversation_history.append({"role": "assistant", "content": msg_content})
 
             # Enhanced system prompt with RAG for MVS agent
             system_prompt = agent.get("system")
@@ -1352,11 +1437,14 @@ async def run_agent_stream(
             # Map model ID to OpenRouter format
             openrouter_model = _map_model_id(model)
             
-            # Build messages
+            # Build messages with conversation history
             messages = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": context_prefix + prior_dialogue})
+            # Add conversation history for context awareness
+            messages.extend(conversation_history)
+            # Add current request with context
+            messages.append({"role": "user", "content": context_prefix})
             
             # Stream from OpenRouter
             accumulated_reasoning = ""
@@ -1370,7 +1458,7 @@ async def run_agent_stream(
             stream_gen = _call_openrouter_api_stream(
                 model=openrouter_model,
                 messages=messages,
-                max_tokens=800,
+                max_tokens=1200,
                 temperature=0.2,
             )
             for chunk in stream_gen:
@@ -1417,14 +1505,15 @@ async def run_agent_stream(
                 "accumulated_content_preview": accumulated_content[:200] if accumulated_content else None
             })
             
-            code = strip_code_fences(accumulated_content)
+            code, explanation_text = extract_code_and_text(accumulated_content)
             
             # If no code found, log warning but still return result with thinking process
             if not code or not code.strip():
                 log_line("agent:stream:code:empty", {
                     **base_log,
                     "accumulated_content_length": len(accumulated_content),
-                    "has_thinking_steps": len(thinking_steps) > 0
+                    "has_thinking_steps": len(thinking_steps) > 0,
+                    "has_text": bool(explanation_text)
                 })
             
             # Safety pass (simplified for streaming)
@@ -1444,6 +1533,9 @@ async def run_agent_stream(
                 "type": "code",
                 "code": code,
             }
+            # Include text explanation if available
+            if explanation_text:
+                final_result["text"] = explanation_text
             
             # Add thinking process if we have steps (even if code is empty)
             if thinking_steps:
@@ -1619,6 +1711,11 @@ async def run_agent_stream(
                             f"Recent AlphaFold2 prediction: {result.get('filename', 'unknown')}"
                         )
         
+        # Detect if user input is a greeting or conversational (not asking about structure)
+        user_text_lower = user_text.lower().strip()
+        greeting_patterns = ["hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening", "thanks", "thank you", "ok", "okay"]
+        is_greeting = any(pattern in user_text_lower for pattern in greeting_patterns) and len(user_text.strip()) < 30
+        
         messages: List[Dict[str, Any]] = []
         context_parts = []
         if uploaded_file_info:
@@ -1627,7 +1724,9 @@ async def run_agent_stream(
             context_parts.append("Recent Structure Generation History:\n" + "\n".join(history_context_lines))
         if selection_context:
             context_parts.append(selection_context)
-        if code_context:
+        # Only include code/structure context if user is NOT just greeting
+        # For greetings, skip structure context to avoid describing structures unnecessarily
+        if code_context and not is_greeting:
             context_parts.append(code_context)
         
         if context_parts:

@@ -39,7 +39,7 @@ if nvidia_key:
 else:
     print("Warning: NVCF_RUN_KEY not found in environment")
 
-from fastapi import FastAPI, Request, UploadFile, File, HTTPException
+from fastapi import FastAPI, Request, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -56,6 +56,10 @@ try:
     from .agents.handlers.rfdiffusion import rfdiffusion_handler
     from .agents.handlers.proteinmpnn import proteinmpnn_handler
     from .domain.storage.pdb_storage import save_uploaded_pdb, get_uploaded_pdb
+    from .domain.storage.file_access import list_user_files, verify_file_ownership, get_file_metadata, get_user_file_path
+    from .database.db import get_db
+    from .api.middleware.auth import get_current_user
+    from .api.routes import auth, chat_sessions, chat_messages, pipelines, credits, reports, admin, three_d_canvases, attachments
 except ImportError:
     # When running directly (not as module)
     import sys
@@ -70,6 +74,10 @@ except ImportError:
     from agents.handlers.rfdiffusion import rfdiffusion_handler
     from agents.handlers.proteinmpnn import proteinmpnn_handler
     from domain.storage.pdb_storage import save_uploaded_pdb, get_uploaded_pdb
+    from domain.storage.file_access import list_user_files, verify_file_ownership, get_file_metadata, get_user_file_path
+    from database.db import get_db
+    from api.middleware.auth import get_current_user
+    from api.routes import auth, chat_sessions, chat_messages, pipelines, credits, reports, admin, three_d_canvases, attachments
 
 DEBUG_API = os.getenv("DEBUG_API", "0") == "1"
 
@@ -91,6 +99,17 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     await init_router(list(agents.values()))
+
+# Register API routers
+app.include_router(auth.router)
+app.include_router(chat_sessions.router)
+app.include_router(chat_messages.router)
+app.include_router(pipelines.router)
+app.include_router(credits.router)
+app.include_router(reports.router)
+app.include_router(admin.router)
+app.include_router(three_d_canvases.router)
+app.include_router(attachments.router)
 
 
 @app.get("/api/health")
@@ -392,16 +411,130 @@ async def alphafold_cancel(request: Request, job_id: str):
         return JSONResponse(status_code=500, content=content)
 
 
+# AlphaFold3 API endpoints
+@app.post("/api/alphafold3/fold")
+@limiter.limit("5/minute")
+async def alphafold3_fold(request: Request):
+    try:
+        body = await request.json()
+        entities = body.get("entities", [])
+        msa_files_map = body.get("msaFilesMap", {})
+        job_id = body.get("jobId")
+        
+        log_line("alphafold3_request", {
+            "jobId": job_id,
+            "entity_count": len(entities),
+            "entity_types": [e.get("type") for e in entities],
+            "client_ip": get_remote_address(request)
+        })
+        
+        if not entities or not job_id:
+            log_line("alphafold3_validation_failed", {
+                "missing_entities": not entities,
+                "missing_jobId": not job_id,
+                "jobId": job_id
+            })
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "error": "Missing entities or jobId",
+                    "errorCode": "MISSING_PARAMETERS",
+                    "userMessage": "Required parameters are missing"
+                }
+            )
+        
+        # Queue background job and return 202 Accepted immediately
+        log_line("alphafold3_submitting", {
+            "jobId": job_id,
+            "handler": "alphafold_handler.submit_alphafold3_job (background)"
+        })
+        
+        try:
+            alphafold_handler.active_jobs[job_id] = "queued"
+        except Exception:
+            pass
+        
+        # Run the folding job asynchronously
+        import asyncio as _asyncio
+        _asyncio.create_task(
+            alphafold_handler.submit_alphafold3_job({
+                "entities": entities,
+                "msaFilesMap": msa_files_map,
+                "jobId": job_id,
+                "sessionId": body.get("sessionId"),
+                "userId": body.get("userId")
+            })
+        )
+        
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "accepted",
+                "jobId": job_id,
+                "message": "AlphaFold3 folding job accepted. Poll /api/alphafold3/status/{job_id} for updates."
+            }
+        )
+        
+    except Exception as e:
+        log_line("alphafold3_fold_failed", {"error": str(e), "trace": traceback.format_exc()})
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "error": "",
+                "errorCode": "INTERNAL_ERROR",
+                "userMessage": "An unexpected error occurred",
+                "technicalMessage": str(e) if DEBUG_API else "Internal server error"
+            }
+        )
+
+
+@app.get("/api/alphafold3/status/{job_id}")
+@limiter.limit("30/minute")
+async def alphafold3_status(request: Request, job_id: str):
+    try:
+        status = alphafold_handler.get_job_status(job_id)
+        return status
+    except Exception as e:
+        log_line("alphafold3_status_failed", {"error": str(e), "trace": traceback.format_exc()})
+        content = {"error": "alphafold3_status_failed"}
+        if DEBUG_API:
+            content["detail"] = str(e)
+        return JSONResponse(status_code=500, content=content)
+
+
+@app.post("/api/alphafold3/cancel/{job_id}")
+@limiter.limit("10/minute")
+async def alphafold3_cancel(request: Request, job_id: str):
+    try:
+        result = alphafold_handler.cancel_job(job_id)
+        return result
+    except Exception as e:
+        log_line("alphafold3_cancel_failed", {"error": str(e), "trace": traceback.format_exc()})
+        content = {"error": "alphafold3_cancel_failed"}
+        if DEBUG_API:
+            content["detail"] = str(e)
+        return JSONResponse(status_code=500, content=content)
+
+
 # PDB upload utilities -----------------------------------------------------
 
 
 @app.post("/api/upload/pdb")
 @limiter.limit("20/minute")
-async def upload_pdb(request: Request, file: UploadFile = File(...)):
+async def upload_pdb(
+    request: Request,
+    file: UploadFile = File(...),
+    user: Dict[str, Any] = Depends(get_current_user)
+):
     _ = request
     try:
         contents = await file.read()
-        metadata = save_uploaded_pdb(file.filename, contents)
+        user_id = user.get("id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID not found")
+        metadata = save_uploaded_pdb(file.filename, contents, user_id)
         log_line(
             "pdb_upload_success",
             {
@@ -443,6 +576,217 @@ async def download_uploaded_pdb(request: Request, file_id: str):
         media_type="chemical/x-pdb",
         filename=metadata.get("filename") or f"{file_id}.pdb",
     )
+
+
+# User file management endpoints -----------------------------------------
+
+
+@app.get("/api/files")
+@limiter.limit("30/minute")
+async def get_user_files_endpoint(request: Request, user: Dict[str, Any] = Depends(get_current_user)):
+    """List all files for the current user. Files are already user-scoped in the database."""
+    _ = request
+    try:
+        log_line("user_files_request", {"user_id": user["id"]})
+        base_dir = Path(__file__).parent
+        all_files = []
+        
+        # Get all user files (already filtered by user_id in list_user_files)
+        user_files = list_user_files(user["id"])
+        log_line("user_files_raw", {"user_id": user["id"], "count": len(user_files)})
+        
+        for file_entry in user_files:
+            file_type = file_entry.get("file_type", "")
+            file_id = file_entry.get("id", "")
+            stored_path_str = file_entry.get("stored_path", "")
+            filename = file_entry.get("original_filename", f"{file_id}")
+            
+            log_line("processing_file", {
+                "file_id": file_id,
+                "file_type": file_type,
+                "stored_path": stored_path_str,
+                "filename": filename
+            })
+            
+            if stored_path_str:
+                file_path = base_dir / stored_path_str
+                file_exists = file_path.exists()
+                log_line("file_path_check", {
+                    "file_id": file_id,
+                    "stored_path": stored_path_str,
+                    "absolute_path": str(file_path),
+                    "exists": file_exists
+                })
+                
+                if file_exists:
+                    # Determine download URL based on file type
+                    if file_type == "upload":
+                        download_url = f"/api/upload/pdb/{file_id}"
+                    elif file_type == "proteinmpnn":
+                        download_url = f"/api/proteinmpnn/result/{file_id}"
+                    else:
+                        # For other types, use generic download endpoint
+                        download_url = f"/api/files/{file_id}/download"
+                    
+                    # Parse metadata if it's a JSON string
+                    metadata = file_entry.get("metadata", {})
+                    if isinstance(metadata, str):
+                        try:
+                            metadata = json.loads(metadata)
+                        except json.JSONDecodeError:
+                            metadata = {}
+                    
+                    file_size = file_entry.get("size", 0)
+                    if file_size == 0:
+                        try:
+                            file_size = file_path.stat().st_size
+                        except OSError:
+                            file_size = 0
+                    
+                    all_files.append({
+                        "file_id": file_id,
+                        "type": file_type,
+                        "filename": filename,
+                        "file_path": stored_path_str,
+                        "size": file_size,
+                        "download_url": download_url,
+                        "metadata": metadata,
+                    })
+                else:
+                    log_line("file_not_found", {
+                        "file_id": file_id,
+                        "expected_path": str(file_path)
+                    })
+        
+        log_line("user_files_loaded", {"user_id": user["id"], "file_count": len(all_files)})
+        
+        return {
+            "status": "success",
+            "files": all_files,
+        }
+    except Exception as e:
+        log_line("user_files_list_failed", {"error": str(e), "trace": traceback.format_exc(), "user_id": user["id"]})
+        content = {"error": "Failed to list user files"}
+        if DEBUG_API:
+            content["detail"] = str(e)
+        return JSONResponse(status_code=500, content=content)
+
+
+@app.get("/api/files/{file_id}/download")
+@limiter.limit("30/minute")
+async def download_user_file(request: Request, file_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+    """Download a user file. Verifies ownership."""
+    _ = request
+    try:
+        # Get file path with ownership verification
+        file_path = get_user_file_path(file_id, user["id"])
+        
+        # Get file metadata for filename
+        file_metadata = get_file_metadata(file_id, user["id"])
+        filename = file_metadata.get("original_filename", f"{file_id}.pdb") if file_metadata else f"{file_id}.pdb"
+        
+        # Determine media type based on file extension
+        media_type = "chemical/x-pdb" if filename.lower().endswith(".pdb") else "application/octet-stream"
+        
+        log_line("file_downloaded", {"file_id": file_id, "user_id": user["id"], "path": str(file_path)})
+        
+        return FileResponse(
+            file_path,
+            media_type=media_type,
+            filename=filename,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_line("file_download_failed", {"error": str(e), "trace": traceback.format_exc()})
+        raise HTTPException(status_code=500, detail="Failed to download file")
+
+
+@app.get("/api/files/{file_id}")
+@limiter.limit("30/minute")
+async def get_user_file_content(request: Request, file_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+    """Get file content as JSON (for editor/viewer). Verifies ownership."""
+    _ = request
+    try:
+        # Get file path with ownership verification
+        file_path = get_user_file_path(file_id, user["id"])
+        
+        # Get file metadata
+        file_metadata = get_file_metadata(file_id, user["id"])
+        if not file_metadata:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        # Read file content
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            # If text decoding fails, return as base64
+            import base64
+            content = base64.b64encode(file_path.read_bytes()).decode("utf-8")
+            return {
+                "status": "success",
+                "file_id": file_id,
+                "filename": file_metadata.get("original_filename", f"{file_id}.pdb"),
+                "content": content,
+                "encoding": "base64",
+                "type": file_metadata.get("file_type", "unknown")
+            }
+        
+        log_line("file_content_accessed", {"file_id": file_id, "user_id": user["id"], "path": str(file_path)})
+        
+        return {
+            "status": "success",
+            "file_id": file_id,
+            "filename": file_metadata.get("original_filename", f"{file_id}.pdb"),
+            "content": content,
+            "type": file_metadata.get("file_type", "unknown")
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_line("file_content_failed", {"error": str(e), "trace": traceback.format_exc()})
+        raise HTTPException(status_code=500, detail="Failed to read file content")
+
+
+@app.delete("/api/files/{file_id}")
+@limiter.limit("10/minute")
+async def delete_user_file(request: Request, file_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+    """Delete a user file. Verifies ownership."""
+    _ = request
+    try:
+        # Verify ownership
+        if not verify_file_ownership(file_id, user["id"]):
+            raise HTTPException(status_code=403, detail="File not found or access denied")
+        
+        # Get file metadata
+        file_metadata = get_file_metadata(file_id, user["id"])
+        if not file_metadata:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        base_dir = Path(__file__).parent
+        stored_path = file_metadata.get("stored_path")
+        
+        if stored_path:
+            file_path = base_dir / stored_path
+            if file_path.exists():
+                file_path.unlink()
+                log_line("file_deleted", {"file_id": file_id, "user_id": user["id"], "path": str(file_path)})
+        
+        # Delete from database
+        with get_db() as conn:
+            conn.execute("DELETE FROM user_files WHERE id = ? AND user_id = ?", (file_id, user["id"]))
+            # Also remove from session_files associations
+            conn.execute("DELETE FROM session_files WHERE file_id = ? AND user_id = ?", (file_id, user["id"]))
+        
+        return {"status": "success", "message": "File deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_line("file_delete_failed", {"error": str(e), "trace": traceback.format_exc(), "file_id": file_id, "user_id": user["id"]})
+        content = {"error": "Failed to delete file"}
+        if DEBUG_API:
+            content["detail"] = str(e)
+        return JSONResponse(status_code=500, content=content)
 
 
 # ProteinMPNN endpoints ---------------------------------------------------
@@ -592,11 +936,12 @@ async def proteinmpnn_result(request: Request, job_id: str, fmt: str = "json"):
 # RFdiffusion API endpoints
 @app.post("/api/rfdiffusion/design")
 @limiter.limit("5/minute")
-async def rfdiffusion_design(request: Request):
+async def rfdiffusion_design(request: Request, user: Dict[str, Any] = Depends(get_current_user)):
     try:
         body = await request.json()
         parameters = body.get("parameters", {})
         job_id = body.get("jobId")
+        session_id = body.get("sessionId")
         
         if not job_id:
             return JSONResponse(
@@ -609,9 +954,18 @@ async def rfdiffusion_design(request: Request):
                 }
             )
         
+        log_line("rfdiffusion_design_request", {
+            "job_id": job_id,
+            "user_id": user["id"],
+            "session_id": session_id,
+            "has_parameters": bool(parameters)
+        })
+        
         result = await rfdiffusion_handler.submit_design_job({
             "parameters": parameters,
-            "jobId": job_id
+            "jobId": job_id,
+            "userId": user["id"],
+            "sessionId": session_id
         })
         
         # Check if result contains an error and return appropriate HTTP status

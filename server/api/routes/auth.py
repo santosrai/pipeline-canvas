@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
+import traceback
 
 try:
     # Try relative import first (when running as module)
@@ -37,11 +38,28 @@ async def signup(user_data: UserCreate) -> Dict[str, Any]:
 async def signin(login_data: UserLogin) -> Dict[str, Any]:
     """User login."""
     try:
+        # Log signin attempt (without password)
+        from ...infrastructure.utils import log_line
+        log_line("signin_attempt", {"email": login_data.email})
+        
         result = authenticate_user(login_data)
-        return {"status": "success", **result}
+        
+        log_line("signin_success", {"email": login_data.email, "user_id": result["user"]["id"]})
+        
+        return {
+            "status": "success",
+            "access_token": result["access_token"],
+            "refresh_token": result["refresh_token"],
+            "token_type": result.get("token_type", "bearer"),
+            "user": result["user"]
+        }
     except ValueError as e:
+        from ...infrastructure.utils import log_line
+        log_line("signin_failed", {"email": login_data.email, "error": str(e)})
         raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
+        from ...infrastructure.utils import log_line
+        log_line("signin_error", {"email": login_data.email, "error": str(e), "trace": traceback.format_exc()})
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
 
 

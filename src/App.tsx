@@ -9,7 +9,7 @@ import { ErrorDashboard, useErrorDashboard } from './components/ErrorDashboard';
 import { FileBrowser } from './components/FileBrowser';
 import { FileEditor } from './components/FileEditor';
 import { PipelineCanvas, PipelineManager, PipelineExecution } from './components/pipeline-canvas';
-import { api } from './utils/api';
+import { api, getAuthHeaders } from './utils/api';
 import { Eye, Code2, Settings, FolderOpen, Workflow } from 'lucide-react';
 import { useAppStore } from './stores/appStore';
 import { useSettingsStore } from './stores/settingsStore';
@@ -45,16 +45,10 @@ function App() {
   const handleFileSelect = async (file: any) => {
     // Load file content and show in editor
     try {
-      const { activeSessionId } = useChatHistoryStore.getState();
-      if (!activeSessionId) {
-        console.error('[App] No active session ID for file selection');
-        return;
-      }
-
       console.log('[App] Loading file:', file.file_id, 'type:', file.type);
       
-      // Use api utility to ensure correct base URL
-      const response = await api.get(`/sessions/${activeSessionId}/files/${file.file_id}`);
+      // Use the generic file content endpoint for all file types
+      const response = await api.get(`/files/${file.file_id}`);
       
       if (response.data.status === 'success') {
         console.log('[App] File loaded successfully:', response.data.filename);
@@ -67,11 +61,19 @@ function App() {
         setActivePane('files');
       } else {
         console.error('[App] Failed to load file - unexpected response:', response.data);
+        alert('Failed to load file: Unexpected response format');
       }
     } catch (error: any) {
       console.error('[App] Failed to load file:', error);
       if (error.response) {
         console.error('[App] Error response:', error.response.status, error.response.data);
+        if (error.response.status === 404) {
+          alert(`File not found. It may have been deleted or you don't have access to it.`);
+        } else {
+          alert(`Failed to load file: ${error.response.data?.detail || error.response.data?.error || 'Unknown error'}`);
+        }
+      } else {
+        alert(`Failed to load file: ${error.message || 'Unknown error'}`);
       }
     }
   };
@@ -104,7 +106,7 @@ function App() {
             <ResizablePanel
               defaultWidth={chatPanelWidth}
               minWidth={280}
-              maxWidth={800}
+              maxWidth={600}
               position="left"
               onWidthChange={setChatPanelWidth}
               className="bg-white hidden md:block"

@@ -64,12 +64,27 @@ def authenticate_user(login_data: UserLogin) -> Dict[str, Any]:
             (login_data.email,)
         ).fetchone()
         
-        if not user or not verify_password(login_data.password, user["password_hash"]):
+        if not user:
             raise ValueError("Invalid email or password")
         
-        # SQLite stores booleans as integers (0/1), so check explicitly
+        # Check if user is active
         if user["is_active"] not in (1, True):
             raise ValueError("Account is deactivated")
+        
+        # Verify password
+        password_hash = user["password_hash"]
+        if not password_hash:
+            raise ValueError("Password hash not found in database")
+        
+        password_valid = verify_password(login_data.password, password_hash)
+        
+        if not password_valid:
+            # Log for debugging (without exposing sensitive info)
+            import sys
+            print(f"[AUTH DEBUG] Password verification failed for user: {user['email']}", file=sys.stderr)
+            print(f"[AUTH DEBUG] Hash length: {len(password_hash) if password_hash else 0}", file=sys.stderr)
+            print(f"[AUTH DEBUG] Hash starts with: {password_hash[:10] if password_hash else 'None'}...", file=sys.stderr)
+            raise ValueError("Invalid email or password")
         
         # Update last login
         conn.execute(

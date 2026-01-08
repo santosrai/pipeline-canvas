@@ -4,6 +4,7 @@ import { RFdiffusionErrorHandler } from '../utils/errorHandler';
 import { AttachmentMenu } from './AttachmentMenu';
 import { useAppStore } from '../stores/appStore';
 import { useChatHistoryStore } from '../stores/chatHistoryStore';
+import { getAuthHeaders } from '../utils/api';
 
 interface RFdiffusionParameters {
   pdb_id?: string;
@@ -65,6 +66,7 @@ export const RFdiffusionDialog: React.FC<RFdiffusionDialogProps> = ({
     file_path?: string;
   } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [detectedPdb, setDetectedPdb] = useState<{
     type: 'pdb_id' | 'upload';
     value: string;
@@ -225,24 +227,71 @@ export const RFdiffusionDialog: React.FC<RFdiffusionDialogProps> = ({
     setParameters(prev => ({ ...prev, hotspot_res: hotspots }));
   };
 
-  // Handle file upload
-  const handleFileUploaded = (result: any) => {
-    if (result.status === 'success' && result.file_info) {
-      setUploadedFile({
-        filename: result.file_info.filename,
-        file_id: result.file_info.file_id,
-        file_path: result.file_info.file_path
-      });
-      setParameters(prev => ({ ...prev, uploadId: result.file_info.file_id, pdb_id: undefined }));
-      setUploadError(null);
-      // If file uploaded, suggest motif_scaffolding mode
-      if (parameters.design_mode === 'unconditional') {
-        setParameters(prev => ({ ...prev, design_mode: 'motif_scaffolding' }));
+  // Handle file selection and upload
+  const handleFileSelected = async (file: File) => {
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (activeSessionId) {
+        formData.append('session_id', activeSessionId);
       }
-    } else if (result.status === 'cleared') {
-      setUploadedFile(null);
-      setParameters(prev => ({ ...prev, uploadId: undefined }));
+
+      const headers = getAuthHeaders();
+      const response = await fetch('/api/upload/pdb', {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Upload failed' }));
+        throw new Error(errorData.detail || 'Upload failed');
+      }
+
+      const result = await response.json();
+      
+      if (result.status === 'success' && result.file_info) {
+        setUploadedFile({
+          filename: result.file_info.filename,
+          file_id: result.file_info.file_id,
+          file_path: result.file_info.file_path
+        });
+        setParameters(prev => ({ 
+          ...prev, 
+          uploadId: result.file_info.file_id, 
+          pdb_id: undefined 
+        }));
+        setUploadError(null);
+        // If file uploaded, suggest motif_scaffolding mode
+        if (parameters.design_mode === 'unconditional') {
+          setParameters(prev => ({ ...prev, design_mode: 'motif_scaffolding' }));
+        }
+        
+        // Dispatch event to notify file browser to refresh
+        window.dispatchEvent(new CustomEvent('session-file-added'));
+        
+        console.log('[RFdiffusionDialog] File uploaded successfully:', {
+          filename: result.file_info.filename,
+          file_id: result.file_info.file_id,
+        });
+      }
+    } catch (error: any) {
+      console.error('[RFdiffusionDialog] File upload failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+      setUploadError(errorMessage);
+    } finally {
+      setIsUploading(false);
     }
+  };
+
+  // Handle file cleared
+  const handleFileCleared = () => {
+    setUploadedFile(null);
+    setParameters(prev => ({ ...prev, uploadId: undefined }));
+    setUploadError(null);
   };
 
   // Validate and submit
@@ -435,29 +484,57 @@ export const RFdiffusionDialog: React.FC<RFdiffusionDialogProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Or Upload PDB File
             </label>
-            <AttachmentMenu
-              onFileUploaded={handleFileUploaded}
-              onError={setUploadError}
-              currentFile={uploadedFile ? {
-                filename: uploadedFile.filename,
-                file_id: uploadedFile.file_id,
-                file_path: uploadedFile.file_path || ''
-              } : null}
-              sessionId={activeSessionId}
-            />
-            {uploadError && (
-              <div className="text-xs text-red-600 mt-1 flex items-center space-x-1">
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>{uploadError}</span>
-              </div>
-            )}
-            {uploadedFile && (
-              <div className="mt-2 text-xs text-gray-600">
-                <span className="font-medium">Uploaded:</span> {uploadedFile.filename}
-              </div>
-            )}
+            <div className="space-y-2">
+              <AttachmentMenu
+                onFileSelected={handleFileSelected}
+                onFileCleared={handleFileCleared}
+                onError={setUploadError}
+                currentFile={uploadedFile ? {
+                  filename: uploadedFile.filename,
+                  file_id: uploadedFile.file_id,
+                  file_path: uploadedFile.file_path || ''
+                } : null}
+                sessionId={activeSessionId}
+                disabled={isUploading}
+              />
+              {isUploading && (
+                <div className="flex items-center space-x-2 text-xs text-blue-600">
+                  <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <span>Uploading file...</span>
+                </div>
+              )}
+              {uploadError && (
+                <div className="text-xs text-red-600 mt-1 flex items-center space-x-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>{uploadError}</span>
+                </div>
+              )}
+              {uploadedFile && !isUploading && (
+                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-xs font-medium text-green-900">Uploaded:</span>
+                      <span className="text-xs text-green-700">{uploadedFile.filename}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleFileCleared}
+                      className="text-green-600 hover:text-green-800"
+                      title="Remove file"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <p className="text-xs text-gray-600 mt-1">
               {parameters.design_mode === 'unconditional'
                 ? 'Optional: Upload a PDB file to use as template'

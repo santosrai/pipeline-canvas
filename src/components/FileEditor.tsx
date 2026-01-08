@@ -21,19 +21,14 @@ export const FileEditor: React.FC<FileEditorProps> = ({ fileId, filename, fileTy
 
   useEffect(() => {
     loadFileContent();
-  }, [fileId, activeSessionId]);
+  }, [fileId]);
 
   const loadFileContent = async () => {
-    if (!activeSessionId) {
-      setError('No active session');
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get(`/sessions/${activeSessionId}/files/${fileId}`);
+      // Use the generic file content endpoint (doesn't require session)
+      const response = await api.get(`/files/${fileId}`);
       if (response.data.status === 'success') {
         setContent(response.data.content || '');
       } else {
@@ -41,7 +36,11 @@ export const FileEditor: React.FC<FileEditorProps> = ({ fileId, filename, fileTy
       }
     } catch (err: any) {
       console.error('Failed to load file content:', err);
-      setError(err.response?.data?.detail || 'Failed to load file content');
+      if (err.response?.status === 404) {
+        setError('File not found. It may have been deleted or you don\'t have access to it.');
+      } else {
+        setError(err.response?.data?.detail || err.response?.data?.error || 'Failed to load file content');
+      }
     } finally {
       setLoading(false);
     }

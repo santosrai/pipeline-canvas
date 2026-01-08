@@ -56,6 +56,13 @@ export interface Message {
     };
     metadata?: Record<string, any>;
   };
+  rfdiffusionResult?: {
+    pdbContent?: string;
+    fileId?: string;
+    filename?: string;
+    parameters?: any;
+    metadata?: any;
+  };
   // File attachment for user messages (deprecated - use attachments array)
   uploadedFile?: {
     file_id: string;
@@ -313,6 +320,7 @@ const createSaveMessageToBackend = (getSessions: () => ChatSession[]) => async (
           thinkingProcess: message.thinkingProcess,
           alphafoldResult: message.alphafoldResult,
           proteinmpnnResult: message.proteinmpnnResult,
+          rfdiffusionResult: message.rfdiffusionResult,
           uploadedFile: message.uploadedFile,
           error: message.error,
         },
@@ -1184,7 +1192,16 @@ export const useChatHistoryStore = create<ChatHistoryState>()(
           const messages: Message[] = backendMessages.map((bm: any) => {
             try {
               // Extract metadata fields and ensure proper types
-              const metadata = bm.metadata || {};
+              // Backend should parse JSON, but handle both string and object cases
+              let metadata = bm.metadata || {};
+              if (typeof metadata === 'string') {
+                try {
+                  metadata = JSON.parse(metadata);
+                } catch (e) {
+                  console.warn(`[syncSessionMessages] Failed to parse metadata JSON for message ${bm.id}:`, e);
+                  metadata = {};
+                }
+              }
               
               // Convert timestamp strings to Date objects in nested structures
               let thinkingProcess = metadata.thinkingProcess;
@@ -1213,10 +1230,15 @@ export const useChatHistoryStore = create<ChatHistoryState>()(
                 ...(metadata.jobId && { jobId: metadata.jobId }),
                 ...(metadata.jobType && { jobType: metadata.jobType }),
                 ...(thinkingProcess && { thinkingProcess }),
-                ...(metadata.alphafoldResult && { alphafoldResult: metadata.alphafoldResult }),
-                ...(metadata.proteinmpnnResult && { proteinmpnnResult: metadata.proteinmpnnResult }),
-                ...(metadata.uploadedFile && { uploadedFile: metadata.uploadedFile }),
-                ...(metadata.error && { error: metadata.error }),
+                // Check for result objects - use != null to check for both null and undefined
+                ...(metadata.alphafoldResult != null && { alphafoldResult: metadata.alphafoldResult }),
+                ...(metadata.proteinmpnnResult != null && { proteinmpnnResult: metadata.proteinmpnnResult }),
+                // RFdiffusion result - check if it exists and is a valid object
+                ...(metadata.rfdiffusionResult != null && 
+                    typeof metadata.rfdiffusionResult === 'object' && 
+                    { rfdiffusionResult: metadata.rfdiffusionResult }),
+                ...(metadata.uploadedFile != null && { uploadedFile: metadata.uploadedFile }),
+                ...(metadata.error != null && { error: metadata.error }),
                 // Linked tools (from backend API response)
                 ...(bm.threeDCanvas && { threeDCanvas: bm.threeDCanvas }),
                 ...(bm.pipeline && { pipeline: bm.pipeline }),

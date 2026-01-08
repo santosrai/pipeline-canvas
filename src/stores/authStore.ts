@@ -36,7 +36,18 @@ export const useAuthStore = create<AuthState>()(
       signin: async (email: string, password: string) => {
         try {
           const response = await api.post('/auth/signin', { email, password });
+          
+          // Handle response - check if status is success
+          if (response.data.status !== 'success') {
+            throw new Error(response.data.detail || 'Sign in failed');
+          }
+          
           const { access_token, refresh_token, user } = response.data;
+          
+          if (!access_token || !refresh_token || !user) {
+            throw new Error('Invalid response from server');
+          }
+          
           set({
             user,
             accessToken: access_token,

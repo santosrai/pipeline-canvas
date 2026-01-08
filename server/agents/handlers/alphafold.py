@@ -22,11 +22,13 @@ try:
     # Try relative import first (when running as module)
     from ...domain.protein.sequence import SequenceExtractor
     from ...tools.nvidia.client import NIMSClient
+    from ...tools.nvidia.alphafold3_client import AlphaFold3Client
     from ...domain.storage.session_tracker import associate_file_with_session
 except ImportError:
     # Fallback to absolute import (when running directly)
     from domain.protein.sequence import SequenceExtractor
     from tools.nvidia.client import NIMSClient
+    from tools.nvidia.alphafold3_client import AlphaFold3Client
     from domain.storage.session_tracker import associate_file_with_session
 
 # Set up file logging for AlphaFold API
@@ -66,12 +68,13 @@ class AlphaFoldHandler:
     
     def __init__(self):
         self.sequence_extractor = SequenceExtractor()
-        self.nims_client = None  # Initialize when needed
+        self.nims_client = None  # Initialize when needed (AlphaFold2)
+        self.alphafold3_client = None  # Initialize when needed (AlphaFold3)
         self.active_jobs = {}  # Track running jobs: queued|running|completed|error|cancelled
         self.job_results: Dict[str, Any] = {}  # Store results or errors by job_id
     
     def _get_nims_client(self) -> NIMSClient:
-        """Get or create NIMS client"""
+        """Get or create NIMS client (AlphaFold2)"""
         if not self.nims_client:
             try:
                 self.nims_client = NIMSClient()
@@ -83,6 +86,19 @@ class AlphaFoldHandler:
                 logger.error(f"Failed to initialize NIMS client: {e}")
                 raise ValueError(f"NIMS API initialization failed: {str(e)}")
         return self.nims_client
+    
+    def _get_alphafold3_client(self) -> AlphaFold3Client:
+        """Get or create AlphaFold3 client"""
+        if not self.alphafold3_client:
+            try:
+                self.alphafold3_client = AlphaFold3Client()
+            except ValueError as e:
+                logger.error(f"AlphaFold3 API configuration error: {e}")
+                raise ValueError("AlphaFold3 API key not configured. Please set the NVCF_RUN_KEY environment variable with your NVIDIA API key.")
+            except Exception as e:
+                logger.error(f"Failed to initialize AlphaFold3 client: {e}")
+                raise ValueError(f"AlphaFold3 API initialization failed: {str(e)}")
+        return self.alphafold3_client
     
     async def process_folding_request(self, input_text: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
@@ -420,6 +436,140 @@ class AlphaFoldHandler:
                 "job_id": job_id,
                 "status": "not_found"
             }
+
+
+    async def submit_alphafold3_job(self, job_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Submit AlphaFold3 folding job with multiple entities
+        
+        Args:
+            job_data: Job parameters from frontend
+                - jobId: Unique job identifier
+                - entities: List of entity dictionaries (type, sequence, chainId, copies, msaFiles)
+                - msaFilesMap: Optional map of entity_id -> list of MSA file paths
+        
+        Returns:
+            Dictionary with job status and result
+        """
+        job_id = job_data.get("jobId")
+        entities = job_data.get("entities", [])
+        msa_files_map = job_data.get("msaFilesMap", {})
+        
+        logger.info(f"[AlphaFold3 Handler] Starting job {job_id} with {len(entities)} entities")
+        api_logger.info(f"=== AlphaFold3 Job Started ===")
+        api_logger.info(f"Job ID: {job_id}")
+        api_logger.info(f"Entities: {len(entities)}")
+        
+        if not entities or not job_id:
+            logger.error(f"[AlphaFold3 Handler] Missing required parameters")
+            api_logger.error(f"Missing required parameters: entities={len(entities)}, job_id={bool(job_id)}")
+            return {
+                "status": "error",
+                "error": "Missing entities or job ID"
+            }
+        
+        try:
+            # Initialize AlphaFold3 client
+            try:
+                logger.info(f"[AlphaFold3 Handler] Initializing AlphaFold3 client for job {job_id}")
+                api_logger.info(f"Initializing AlphaFold3 client for job {job_id}")
+                af3_client = self._get_alphafold3_client()
+                logger.info(f"[AlphaFold3 Handler] AlphaFold3 client initialized successfully")
+                api_logger.info(f"AlphaFold3 client initialized successfully")
+            except ValueError as config_error:
+                logger.error(f"[AlphaFold3 Handler] Client initialization failed: {config_error}")
+                api_logger.error(f"Client initialization failed: {config_error}")
+                self.active_jobs[job_id] = "error"
+                return {
+                    "status": "error",
+                    "error": str(config_error)
+                }
+            
+            # Create progress callback
+            def progress_callback(message: str, progress: float):
+                logger.info(f"Job {job_id} progress: {progress}% - {message}")
+            
+            # Mark as running
+            self.active_jobs[job_id] = "running"
+            logger.info(f"[AlphaFold3 Handler] Job {job_id} marked as running, submitting to AlphaFold3 API")
+            api_logger.info(f"Job {job_id} status: running")
+            
+            # Submit to AlphaFold3 API
+            result = await af3_client.submit_folding_request(
+                entities=entities,
+                request_id=job_id,
+                msa_files_map=msa_files_map,
+                progress_callback=progress_callback
+            )
+            
+            logger.info(f"[AlphaFold3 Handler] API call completed, result status: {result.get('status')}")
+            api_logger.info(f"=== AlphaFold3 API Response ===")
+            api_logger.info(f"Status: {result.get('status')}")
+            
+            if result.get("status") == "completed":
+                # Extract PDB content
+                pdb_content = af3_client.extract_pdb_from_result(result["data"])
+                
+                if pdb_content:
+                    # Save PDB file
+                    filename = f"alphafold3_{job_id}.pdb"
+                    filepath = af3_client.save_pdb_file(pdb_content, filename)
+                    
+                    # Associate file with session if session_id provided
+                    session_id = job_data.get("sessionId")
+                    if session_id:
+                        try:
+                            user_id = job_data.get("userId")
+                            if user_id:
+                                associate_file_with_session(
+                                    session_id=session_id,
+                                    file_id=filename,
+                                    user_id=user_id,
+                                    file_type="pdb",
+                                    file_path=filepath
+                                )
+                        except Exception as e:
+                            logger.warning(f"Failed to associate file with session: {e}")
+                    
+                    self.active_jobs[job_id] = "completed"
+                    self.job_results[job_id] = {
+                        "status": "completed",
+                        "pdb_content": pdb_content,
+                        "filepath": filepath,
+                        "filename": filename
+                    }
+                    
+                    api_logger.info(f"Job {job_id} completed successfully. PDB saved to {filepath}")
+                    return {
+                        "status": "completed",
+                        "pdb_content": pdb_content,
+                        "filepath": filepath,
+                        "filename": filename
+                    }
+                else:
+                    error_msg = "PDB content not found in API response"
+                    logger.error(f"[AlphaFold3 Handler] {error_msg}")
+                    api_logger.error(f"{error_msg}")
+                    self.active_jobs[job_id] = "error"
+                    self.job_results[job_id] = {"status": "error", "error": error_msg}
+                    return {"status": "error", "error": error_msg}
+            else:
+                # Error occurred
+                error_msg = result.get("error", "Unknown error")
+                logger.error(f"[AlphaFold3 Handler] Job {job_id} failed: {error_msg}")
+                api_logger.error(f"Job {job_id} failed: {error_msg}")
+                self.active_jobs[job_id] = "error"
+                self.job_results[job_id] = {"status": "error", "error": error_msg}
+                return {"status": "error", "error": error_msg}
+        
+        except Exception as e:
+            import traceback
+            error_details = f"AlphaFold3 job failed: {e}\nTraceback: {traceback.format_exc()}"
+            logger.error(f"[AlphaFold3 Handler] {error_details}")
+            api_logger.error(error_details)
+            self.active_jobs[job_id] = "error"
+            self.job_results[job_id] = {"status": "error", "error": str(e)}
+            return {"status": "error", "error": str(e)}
 
 
 # Global handler instance
