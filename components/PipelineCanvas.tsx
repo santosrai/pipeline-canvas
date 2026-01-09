@@ -22,6 +22,7 @@ import { SavedPipelinesList } from './SavedPipelinesList';
 import { SavePipelineDialog } from './SavePipelineDialog';
 import { ExecutionLogsPanel } from './ExecutionLogsPanel';
 import { CustomHandle } from './CustomHandle';
+import { NodeContextMenu } from './NodeContextMenu';
 import { 
   Play, 
   Square, 
@@ -702,6 +703,7 @@ export const PipelineCanvas: React.FC = () => {
     rejectBlueprint,
     updateNode,
     deleteNode,
+    addNode,
     addEdge: addPipelineEdge,
     startExecution,
     stopExecution,
@@ -717,6 +719,76 @@ export const PipelineCanvas: React.FC = () => {
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [showPalette, setShowPalette] = React.useState(false);
   const [showSaveDialog, setShowSaveDialog] = React.useState(false);
+  
+  // Auto-select first node when a new pipeline is created from blueprint (for configuration)
+  // This helps users immediately see the configuration panel after approving a blueprint
+  // But NOT when loading an existing pipeline from the sidebar
+  const previousPipelineIdRef = React.useRef<string | null>(null);
+  const shouldAutoSelectRef = React.useRef<boolean>(false);
+  
+  React.useEffect(() => {
+    const currentPipelineId = currentPipeline?.id || null;
+    const pipelineChanged = currentPipelineId !== previousPipelineIdRef.current;
+    
+    // Only auto-select if:
+    // 1. We have a pipeline with nodes
+    // 2. The pipeline ID changed (new pipeline created)
+    // 3. We should auto-select (set when blueprint is approved)
+    // 4. No node is currently selected
+    // 5. We're in editor mode
+    if (
+      currentPipeline && 
+      currentPipeline.nodes.length > 0 && 
+      pipelineChanged &&
+      shouldAutoSelectRef.current &&
+      !selectedNodeId && 
+      viewMode === 'editor'
+    ) {
+      // Find the first input_node, or fall back to the first node
+      const firstInputNode = currentPipeline.nodes.find(n => n.type === 'input_node');
+      const nodeToSelect = firstInputNode || currentPipeline.nodes[0];
+      if (nodeToSelect) {
+        console.log('[PipelineCanvas] Auto-selecting first node for configuration:', nodeToSelect.id, nodeToSelect.type);
+        // Small delay to ensure the canvas is rendered
+        setTimeout(() => {
+          setSelectedNodeId(nodeToSelect.id);
+        }, 100);
+      }
+      // Reset the flag after auto-selecting
+      shouldAutoSelectRef.current = false;
+    } else if (pipelineChanged && !shouldAutoSelectRef.current) {
+      // Pipeline changed but we shouldn't auto-select (e.g., loaded from sidebar)
+      // Clear any selected node to ensure clean state
+      if (selectedNodeId) {
+        setSelectedNodeId(null);
+      }
+    }
+    
+    // Update the ref to track pipeline changes
+    previousPipelineIdRef.current = currentPipelineId;
+  }, [currentPipeline?.id, currentPipeline?.nodes.length, selectedNodeId, viewMode]);
+  
+  // Listen for blueprint approval events to enable auto-selection
+  React.useEffect(() => {
+    const handleBlueprintApproved = () => {
+      console.log('[PipelineCanvas] Blueprint approved, will auto-select first node');
+      shouldAutoSelectRef.current = true;
+    };
+    
+    // Listen for custom event when blueprint is approved
+    window.addEventListener('blueprint-approved', handleBlueprintApproved);
+    
+    return () => {
+      window.removeEventListener('blueprint-approved', handleBlueprintApproved);
+    };
+  }, []);
+  
+  // Context menu state
+  const [contextMenu, setContextMenu] = React.useState<{
+    nodeId: string;
+    x: number;
+    y: number;
+  } | null>(null);
   
   // Draggable panel state
   const [panelPosition, setPanelPosition] = React.useState({ right: 16, top: 80 }); // Default: right-4 (16px), top-20 (80px)
@@ -1063,6 +1135,18 @@ export const PipelineCanvas: React.FC = () => {
     setSelectedNodeId(node.id);
   }, []);
 
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    // Get mouse position relative to viewport
+    setContextMenu({
+      nodeId: node.id,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }, []);
+
   const handleNodeDelete = useCallback(
     (nodeId: string) => {
       deleteNode(nodeId);
@@ -1070,6 +1154,53 @@ export const PipelineCanvas: React.FC = () => {
     },
     [deleteNode]
   );
+
+  // Context menu handlers
+  const handleContextMenuRename = useCallback(() => {
+    if (!contextMenu) return;
+    const node = currentPipeline?.nodes.find(n => n.id === contextMenu.nodeId);
+    if (node) {
+      setSelectedNodeId(contextMenu.nodeId);
+      // Trigger rename by focusing the EditableLabel (handled by the node component)
+    }
+  }, [contextMenu, currentPipeline]);
+
+  const handleContextMenuDelete = useCallback(() => {
+    if (!contextMenu) return;
+    if (confirm('Are you sure you want to delete this node?')) {
+      handleNodeDelete(contextMenu.nodeId);
+    }
+  }, [contextMenu, handleNodeDelete]);
+
+  const handleContextMenuConfigure = useCallback(() => {
+    if (!contextMenu) return;
+    setSelectedNodeId(contextMenu.nodeId);
+  }, [contextMenu]);
+
+  const handleContextMenuDuplicate = useCallback(() => {
+    if (!contextMenu || !currentPipeline) return;
+    const node = currentPipeline.nodes.find(n => n.id === contextMenu.nodeId);
+    if (!node) return;
+
+    const newNode: PipelineNode = {
+      ...node,
+      id: `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      label: `${node.label} (Copy)`,
+      position: {
+        x: (node.position?.x || 0) + 50,
+        y: (node.position?.y || 0) + 50,
+      },
+      status: 'idle',
+      error: undefined,
+      result_metadata: undefined,
+    };
+
+    addNode(newNode);
+  }, [contextMenu, currentPipeline, addNode]);
+
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
 
   const handleSavePipeline = () => {
     setShowSaveDialog(true);
@@ -1102,10 +1233,6 @@ export const PipelineCanvas: React.FC = () => {
       <div className="h-14 flex items-center justify-between px-4 border-b border-gray-700/50 bg-[#1e1e32]">
         {/* Left side - View toggle */}
         <div className="flex items-center gap-4">
-          <h2 className="text-sm font-semibold text-gray-200">
-            {currentPipeline?.name || 'Pipeline Canvas'}
-          </h2>
-          
           {/* Auto-save indicator (like n8n) */}
           {currentPipeline && (
             <div className="flex items-center gap-2 text-xs text-gray-400">
@@ -1266,6 +1393,7 @@ export const PipelineCanvas: React.FC = () => {
                   onConnect={onConnect}
                   onNodeClick={onNodeClick}
                   onNodeDoubleClick={onNodeDoubleClick}
+                  onNodeContextMenu={onNodeContextMenu}
                   nodeTypes={memoizedNodeTypes}
                   fitView
                   className="bg-[#1a1a2e]"
@@ -1315,6 +1443,7 @@ export const PipelineCanvas: React.FC = () => {
                   onConnect={onConnect}
                   onNodeClick={onNodeClick}
                   onNodeDoubleClick={onNodeDoubleClick}
+                  onNodeContextMenu={onNodeContextMenu}
                   nodeTypes={memoizedNodeTypes}
                   fitView
                   className="bg-[#1a1a2e]"
@@ -1463,6 +1592,27 @@ export const PipelineCanvas: React.FC = () => {
           />
         </div>
       )}
+
+      {/* Node Context Menu */}
+      {contextMenu && (() => {
+        const node = currentPipeline?.nodes.find(n => n.id === contextMenu.nodeId) || 
+                     ghostBlueprint?.nodes.find(n => n.id === contextMenu.nodeId);
+        if (!node) return null;
+        
+        return (
+          <NodeContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            nodeId={contextMenu.nodeId}
+            nodeLabel={node.label || node.type}
+            onRename={handleContextMenuRename}
+            onDelete={handleContextMenuDelete}
+            onConfigure={handleContextMenuConfigure}
+            onDuplicate={handleContextMenuDuplicate}
+            onClose={handleCloseContextMenu}
+          />
+        );
+      })()}
     </div>
   );
 };

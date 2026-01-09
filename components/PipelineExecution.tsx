@@ -430,17 +430,57 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
           usePipelineStore.getState().stopExecution();
         }
         
-        if (currentPipeline) {
+        // IMPORTANT: Read current pipeline fresh from store to get latest node states
+        // The closure's currentPipeline might be stale after node updates
+        const freshPipeline = usePipelineStore.getState().currentPipeline;
+        if (freshPipeline) {
+          // Explicitly preserve all node statuses and result_metadata after execution completes
+          // This ensures nodes maintain their success/failure visual states (green/red borders)
           const updatedPipeline = {
-            ...currentPipeline,
+            ...freshPipeline,
             status: 'completed' as const,
+            // Preserve node states - ensure completed/error nodes keep their status
+            nodes: freshPipeline.nodes.map(node => {
+              const hasResult = node.result_metadata && Object.keys(node.result_metadata).length > 0;
+              const hasError = node.status === 'error' || !!node.error;
+              
+              // If node has result_metadata but status was reset, restore to 'completed'
+              // If node has error, ensure status is 'error'
+              let finalStatus = node.status;
+              if (hasResult && (node.status === 'idle' || node.status === 'pending' || !node.status)) {
+                finalStatus = 'completed';
+              } else if (hasError && node.status !== 'error') {
+                finalStatus = 'error';
+              } else if (node.status === 'running') {
+                // If still marked as running but execution completed, mark as completed if has result
+                finalStatus = hasResult ? 'completed' : 'error';
+              }
+              
+              return {
+                ...node,
+                status: finalStatus,
+                // Ensure result_metadata is preserved
+                result_metadata: node.result_metadata || undefined,
+              };
+            }),
           };
+          
+          console.log('[PipelineExecution] Preserving node states after completion:', {
+            nodeCount: updatedPipeline.nodes.length,
+            nodeStates: updatedPipeline.nodes.map(n => ({
+              id: n.id,
+              label: n.label,
+              status: n.status,
+              hasResultMetadata: !!(n.result_metadata && Object.keys(n.result_metadata).length > 0),
+            })),
+          });
+          
           usePipelineStore.getState().setCurrentPipeline(updatedPipeline);
           
           // Emit pipeline completed event
           window.dispatchEvent(new CustomEvent('pipeline-completed', {
             detail: {
-              pipelineId: currentPipeline.id,
+              pipelineId: freshPipeline.id,
               status: 'completed',
               nodes: updatedPipeline.nodes,
             }

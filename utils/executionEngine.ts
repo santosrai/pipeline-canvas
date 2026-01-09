@@ -455,12 +455,78 @@ export async function executeNode(
                       }
                     }
                     
-                    // Add sessionId to associate files with session
-                    if (context.sessionId) {
-                      resolvedPayload.sessionId = context.sessionId;
-                      console.log('[ExecutionEngine] Added sessionId to RFdiffusion payload:', context.sessionId);
-                    } else {
-                      console.warn('[ExecutionEngine] No sessionId available for RFdiffusion node');
+                    // Transform RFdiffusion payload to match backend API format
+                    // Backend expects: { parameters: {...}, jobId: "...", sessionId: "..." }
+                    if (node.type === 'rfdiffusion_node' && resolvedPayload && typeof resolvedPayload === 'object') {
+                      // Generate a unique jobId if not already present
+                      const jobId = `rf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                      
+                      // Extract parameters (everything except jobId and sessionId)
+                      const parameters = { ...resolvedPayload };
+                      delete parameters.jobId;
+                      delete parameters.sessionId;
+                      
+                      // Transform file references: pdb_file can be a file object with file_id
+                      // Backend expects uploadId (file_id) or pdb_id
+                      if (parameters.pdb_file) {
+                        // If pdb_file is an object with file_id, convert to uploadId
+                        if (typeof parameters.pdb_file === 'object' && parameters.pdb_file.file_id) {
+                          parameters.uploadId = parameters.pdb_file.file_id;
+                          delete parameters.pdb_file;
+                        } else if (typeof parameters.pdb_file === 'string' && parameters.pdb_file.trim()) {
+                          // If it's a string, it might be a file_id or file path
+                          // Check if it looks like a file_id (UUID or similar)
+                          if (parameters.pdb_file.length > 20 || parameters.pdb_file.includes('/')) {
+                            // Looks like a file path, keep as pdb_file
+                          } else {
+                            // Likely a file_id, convert to uploadId
+                            parameters.uploadId = parameters.pdb_file;
+                            delete parameters.pdb_file;
+                          }
+                        }
+                      }
+                      
+                      // Also check inputData for file references
+                      if (inputData && inputData.target) {
+                        const fileData = inputData.target;
+                        if (fileData && typeof fileData === 'object' && fileData.file_id) {
+                          // Use file_id as uploadId
+                          parameters.uploadId = fileData.file_id;
+                          // Remove pdb_file if it was set incorrectly
+                          delete parameters.pdb_file;
+                        }
+                      }
+                      
+                      // If we have an uploadId, remove empty pdb_id to avoid confusion
+                      // Backend prioritizes uploadId over pdb_id, so empty pdb_id is not needed
+                      if (parameters.uploadId && (!parameters.pdb_id || parameters.pdb_id.trim() === '')) {
+                        delete parameters.pdb_id;
+                        console.log('[ExecutionEngine] Removed empty pdb_id since uploadId is present:', parameters.uploadId);
+                      }
+                      
+                      // Transform to backend format
+                      resolvedPayload = {
+                        parameters: parameters,
+                        jobId: jobId
+                      };
+                      
+                      // Add sessionId if available
+                      if (context.sessionId) {
+                        resolvedPayload.sessionId = context.sessionId;
+                        console.log('[ExecutionEngine] Transformed RFdiffusion payload with jobId:', jobId, 'sessionId:', context.sessionId, 'parameters:', Object.keys(parameters));
+                      } else {
+                        console.log('[ExecutionEngine] Transformed RFdiffusion payload with jobId:', jobId, '(no sessionId)', 'parameters:', Object.keys(parameters));
+                      }
+                    } else if (node.type === 'rfdiffusion_node') {
+                      // Fallback: if payload is not an object, create a basic structure
+                      const jobId = `rf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                      resolvedPayload = {
+                        parameters: resolvedPayload || {},
+                        jobId: jobId
+                      };
+                      if (context.sessionId) {
+                        resolvedPayload.sessionId = context.sessionId;
+                      }
                     }
                   }
                 } catch (e) {
@@ -482,12 +548,37 @@ export async function executeNode(
                   // CRITICAL: Resolve template variables in the parsed payload
                   resolvedPayload = resolveTemplates(resolvedPayload, node, inputData);
                   
-                // Add sessionId for RFdiffusion nodes to associate files with session
-                if (node.type === 'rfdiffusion_node' && context.sessionId && resolvedPayload && typeof resolvedPayload === 'object') {
-                  resolvedPayload.sessionId = context.sessionId;
-                  console.log('[ExecutionEngine] Added sessionId to RFdiffusion payload (expression):', context.sessionId);
-                } else if (node.type === 'rfdiffusion_node' && !context.sessionId) {
-                  console.warn('[ExecutionEngine] No sessionId available for RFdiffusion node (expression)');
+                // Transform RFdiffusion payload to match backend API format (expression mode)
+                if (node.type === 'rfdiffusion_node' && resolvedPayload && typeof resolvedPayload === 'object') {
+                  const jobId = `rf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                  const parameters = { ...resolvedPayload };
+                  delete parameters.jobId;
+                  delete parameters.sessionId;
+                  
+                  // Transform file references
+                  if (parameters.pdb_file && typeof parameters.pdb_file === 'object' && parameters.pdb_file.file_id) {
+                    parameters.uploadId = parameters.pdb_file.file_id;
+                    delete parameters.pdb_file;
+                  }
+                  if (inputData && inputData.target && typeof inputData.target === 'object' && inputData.target.file_id) {
+                    parameters.uploadId = inputData.target.file_id;
+                    delete parameters.pdb_file;
+                  }
+                  
+                  // If we have an uploadId, remove empty pdb_id
+                  if (parameters.uploadId && (!parameters.pdb_id || parameters.pdb_id.trim() === '')) {
+                    delete parameters.pdb_id;
+                  }
+                  
+                  resolvedPayload = {
+                    parameters: parameters,
+                    jobId: jobId
+                  };
+                  
+                  if (context.sessionId) {
+                    resolvedPayload.sessionId = context.sessionId;
+                    console.log('[ExecutionEngine] Transformed RFdiffusion payload (expression) with jobId:', jobId);
+                  }
                 }
                 } catch (e) {
                   resolvedPayload = bodyJson; // Fallback to raw string
@@ -505,12 +596,37 @@ export async function executeNode(
                 // CRITICAL: Resolve template variables in legacy payload
                 resolvedPayload = resolveTemplates(resolvedPayload, node, inputData);
                 
-                // Add sessionId for RFdiffusion nodes to associate files with session
-                if (node.type === 'rfdiffusion_node' && context.sessionId) {
-                  resolvedPayload.sessionId = context.sessionId;
-                  console.log('[ExecutionEngine] Added sessionId to RFdiffusion payload (legacy):', context.sessionId);
-                } else if (node.type === 'rfdiffusion_node' && !context.sessionId) {
-                  console.warn('[ExecutionEngine] No sessionId available for RFdiffusion node (legacy)');
+                // Transform RFdiffusion payload to match backend API format (legacy mode)
+                if (node.type === 'rfdiffusion_node' && resolvedPayload && typeof resolvedPayload === 'object') {
+                  const jobId = `rf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                  const parameters = { ...resolvedPayload };
+                  delete parameters.jobId;
+                  delete parameters.sessionId;
+                  
+                  // Transform file references
+                  if (parameters.pdb_file && typeof parameters.pdb_file === 'object' && parameters.pdb_file.file_id) {
+                    parameters.uploadId = parameters.pdb_file.file_id;
+                    delete parameters.pdb_file;
+                  }
+                  if (inputData && inputData.target && typeof inputData.target === 'object' && inputData.target.file_id) {
+                    parameters.uploadId = inputData.target.file_id;
+                    delete parameters.pdb_file;
+                  }
+                  
+                  // If we have an uploadId, remove empty pdb_id
+                  if (parameters.uploadId && (!parameters.pdb_id || parameters.pdb_id.trim() === '')) {
+                    delete parameters.pdb_id;
+                  }
+                  
+                  resolvedPayload = {
+                    parameters: parameters,
+                    jobId: jobId
+                  };
+                  
+                  if (context.sessionId) {
+                    resolvedPayload.sessionId = context.sessionId;
+                    console.log('[ExecutionEngine] Transformed RFdiffusion payload (legacy) with jobId:', jobId);
+                  }
                 }
               }
               
@@ -610,24 +726,91 @@ export async function executeNode(
           }
         } else {
           // For internal API calls, use the apiClient
-          switch (method) {
-            case 'GET':
-              responseData = await context.apiClient.get(finalUrl, requestConfig);
-              break;
-            case 'POST':
-              responseData = await context.apiClient.post(finalUrl, resolvedPayload, requestConfig);
-              break;
-            case 'PUT':
-              responseData = await context.apiClient.post(finalUrl, resolvedPayload, { ...requestConfig, method: 'PUT' } as any);
-              break;
-            case 'PATCH':
-              responseData = await context.apiClient.post(finalUrl, resolvedPayload, { ...requestConfig, method: 'PATCH' } as any);
-              break;
-            case 'DELETE':
-              responseData = await context.apiClient.get(finalUrl, requestConfig);
-              break;
-            default:
-              throw new Error(`Unsupported HTTP method: ${method}`);
+          try {
+            console.log('[ExecutionEngine] Making API call:', { method, url: finalUrl, hasPayload: !!resolvedPayload });
+            let axiosResponse: any;
+            switch (method) {
+              case 'GET':
+                axiosResponse = await context.apiClient.get(finalUrl, requestConfig);
+                break;
+              case 'POST':
+                axiosResponse = await context.apiClient.post(finalUrl, resolvedPayload, requestConfig);
+                break;
+              case 'PUT':
+                axiosResponse = await context.apiClient.post(finalUrl, resolvedPayload, { ...requestConfig, method: 'PUT' } as any);
+                break;
+              case 'PATCH':
+                axiosResponse = await context.apiClient.post(finalUrl, resolvedPayload, { ...requestConfig, method: 'PATCH' } as any);
+                break;
+              case 'DELETE':
+                axiosResponse = await context.apiClient.get(finalUrl, requestConfig);
+                break;
+              default:
+                throw new Error(`Unsupported HTTP method: ${method}`);
+            }
+            
+            console.log('[ExecutionEngine] API response received:', { 
+              hasResponse: !!axiosResponse, 
+              responseType: typeof axiosResponse,
+              hasData: axiosResponse && typeof axiosResponse === 'object' && 'data' in axiosResponse,
+              keys: axiosResponse && typeof axiosResponse === 'object' ? Object.keys(axiosResponse) : []
+            });
+            
+            // Axios returns response object with data property
+            // Extract data and response metadata
+            if (axiosResponse && typeof axiosResponse === 'object') {
+              if ('data' in axiosResponse) {
+                responseData = axiosResponse.data;
+                // Also extract status and headers from axios response
+                if ('status' in axiosResponse) {
+                  responseStatus = axiosResponse.status;
+                }
+                if ('statusText' in axiosResponse) {
+                  responseStatusText = axiosResponse.statusText;
+                }
+                if ('headers' in axiosResponse && axiosResponse.headers) {
+                  responseHeaders = axiosResponse.headers;
+                }
+              } else {
+                // If no data property, use the whole response
+                responseData = axiosResponse;
+              }
+            } else {
+              responseData = axiosResponse;
+            }
+          } catch (axiosError: any) {
+            console.error('[ExecutionEngine] Axios error:', {
+              message: axiosError.message,
+              code: axiosError.code,
+              hasResponse: !!axiosError.response,
+              hasRequest: !!axiosError.request,
+              responseStatus: axiosError.response?.status,
+              responseData: axiosError.response?.data,
+              url: finalUrl,
+              method
+            });
+            
+            // Handle axios-specific errors
+            if (axiosError.response) {
+              // Server responded with error status
+              responseStatus = axiosError.response.status;
+              responseStatusText = axiosError.response.statusText || 'Error';
+              responseHeaders = axiosError.response.headers || {};
+              responseData = axiosError.response.data;
+              // Re-throw with proper error structure
+              const httpError = new Error(`HTTP ${responseStatus}: ${responseStatusText}`);
+              (httpError as any).response = axiosError.response;
+              throw httpError;
+            } else if (axiosError.request) {
+              // Request was made but no response received (network error)
+              const networkError = new Error(`Network Error: ${axiosError.message || 'No response from server. Please check your connection and try again.'}`);
+              (networkError as any).code = axiosError.code || 'NETWORK_ERROR';
+              (networkError as any).request = axiosError.request;
+              throw networkError;
+            } else {
+              // Error setting up the request
+              throw new Error(`Request Error: ${axiosError.message || 'Failed to make request'}`);
+            }
           }
         }
 
@@ -647,11 +830,15 @@ export async function executeNode(
         };
       } catch (error: any) {
         // Capture error response details
+        // Check if it's an axios error with response
+        const isNetworkError = error.message?.includes('Network Error') || error.code === 'NETWORK_ERROR' || error.code === 'ERR_NETWORK';
+        const hasResponse = error.response && typeof error.response === 'object';
+        
         const errorResponse = {
-          status: error.response?.status || responseStatus || 500,
-          statusText: error.response?.statusText || responseStatusText || 'Error',
-          headers: error.response?.headers || responseHeaders,
-          data: error.response?.data || error.message,
+          status: hasResponse ? error.response.status : (isNetworkError ? 0 : responseStatus || 500),
+          statusText: hasResponse ? error.response.statusText : (isNetworkError ? 'Network Error' : responseStatusText || 'Error'),
+          headers: hasResponse ? error.response.headers : responseHeaders,
+          data: hasResponse ? error.response.data : (isNetworkError ? { error: error.message, status: 'error' } : error.message),
         };
 
         // Attach request/response to error for logging

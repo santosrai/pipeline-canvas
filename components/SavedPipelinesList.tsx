@@ -1,10 +1,18 @@
 import React, { useState } from 'react';
 import { usePipelineStore } from '../store/pipelineStore';
 import { Pipeline } from '../types/index';
-import { Trash2, Edit2, FolderOpen, Plus } from 'lucide-react';
+import { Trash2, Edit2, FolderOpen, Plus, X, Menu } from 'lucide-react';
 
 export const SavedPipelinesList: React.FC = () => {
-  const { savedPipelines, loadPipeline, deletePipeline, currentPipeline, setCurrentPipeline } = usePipelineStore();
+  const { 
+    savedPipelines, 
+    loadPipeline, 
+    deletePipeline, 
+    currentPipeline, 
+    setCurrentPipeline,
+    isPipelinesSidebarCollapsed,
+    togglePipelinesSidebar
+  } = usePipelineStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
 
@@ -70,12 +78,64 @@ export const SavedPipelinesList: React.FC = () => {
     setEditName('');
   };
 
+  // Collapsed sidebar view
+  if (isPipelinesSidebarCollapsed) {
+    return (
+      <div className="w-12 bg-[#1e1e32] border-r border-gray-700/50 flex flex-col items-center py-2 space-y-2 flex-shrink-0">
+        {/* Toggle button */}
+        <button
+          onClick={togglePipelinesSidebar}
+          className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 rounded transition-colors"
+          title="Expand sidebar"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        {/* New pipeline button */}
+        <button
+          onClick={handleNewPipeline}
+          className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 rounded transition-colors"
+          title="New Pipeline"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+
+        {/* Active pipeline indicator */}
+        {currentPipeline && (
+          <div className="w-8 h-8 flex items-center justify-center">
+            <div className="w-2 h-2 bg-blue-500 rounded-full" title="Active pipeline" />
+          </div>
+        )}
+
+        {/* Pipeline count indicator */}
+        {savedPipelines.length > 0 && (
+          <div className="mt-auto mb-2">
+            <div className="w-6 h-6 bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 flex items-center justify-center">
+              {savedPipelines.length > 99 ? '99+' : savedPipelines.length}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Expanded sidebar view
   return (
-    <div className="w-64 bg-[#1e1e32] border-r border-gray-700/50 p-4 flex flex-col h-full">
-      <h3 className="text-sm font-semibold text-gray-200 mb-3 flex-shrink-0 flex items-center gap-2">
-        <FolderOpen className="w-4 h-4" />
-        Saved Pipelines
-      </h3>
+    <div className="w-64 bg-[#1e1e32] border-r border-gray-700/50 p-4 flex flex-col h-full flex-shrink-0 animate-in slide-in-from-left duration-300">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <FolderOpen className="w-4 h-4 text-gray-300" />
+          <h3 className="text-sm font-semibold text-gray-200">Saved Pipelines</h3>
+        </div>
+        <button
+          onClick={togglePipelinesSidebar}
+          className="p-1 text-gray-500 hover:text-gray-300 hover:bg-gray-800/50 rounded transition-colors"
+          title="Collapse sidebar"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
       
       {/* New Pipeline Button */}
       <button

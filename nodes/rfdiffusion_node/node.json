@@ -26,8 +26,8 @@
     "url": {
       "type": "string",
       "required": true,
-      "default": "/rfdiffusion/run",
-      "placeholder": "/rfdiffusion/run",
+      "default": "/rfdiffusion/design",
+      "placeholder": "/rfdiffusion/design",
       "label": "URL",
       "helpText": "API endpoint URL (relative or absolute)"
     },
@@ -207,7 +207,7 @@
   },
   "defaultConfig": {
     "method": "POST",
-    "url": "/rfdiffusion/run",
+    "url": "/rfdiffusion/design",
     "api_key": "",
     "send_query_params": false,
     "query_params": "{}",

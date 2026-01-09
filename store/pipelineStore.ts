@@ -65,6 +65,9 @@ interface PipelineState {
   viewMode: 'editor' | 'executions';
   selectedLogNodeId: string | null;
   
+  // Sidebar state
+  isPipelinesSidebarCollapsed: boolean;
+  
   // Auto-save state
   lastSavedAt: Date | null;
   isSaving: boolean;
@@ -93,6 +96,10 @@ interface PipelineState {
   // View mode actions
   setViewMode: (mode: 'editor' | 'executions') => void;
   setSelectedLogNodeId: (nodeId: string | null) => void;
+  
+  // Sidebar actions
+  setPipelinesSidebarCollapsed: (collapsed: boolean) => void;
+  togglePipelinesSidebar: () => void;
   
   // Execution log actions
   addExecutionLog: (entry: Omit<ExecutionLogEntry, 'startedAt'>) => void;
@@ -162,6 +169,7 @@ export const usePipelineStore = create<PipelineState>()(
       executionHistory: [],
       viewMode: 'editor',
       selectedLogNodeId: null,
+      isPipelinesSidebarCollapsed: false,
       lastSavedAt: null,
       isSaving: false,
       
@@ -909,6 +917,9 @@ export const usePipelineStore = create<PipelineState>()(
       setViewMode: (mode) => set({ viewMode: mode }),
       
       setSelectedLogNodeId: (nodeId) => set({ selectedLogNodeId: nodeId }),
+      
+      setPipelinesSidebarCollapsed: (collapsed) => set({ isPipelinesSidebarCollapsed: collapsed }),
+      togglePipelinesSidebar: () => set((state) => ({ isPipelinesSidebarCollapsed: !state.isPipelinesSidebarCollapsed })),
       
       addExecutionLog: (entry) => {
         const { currentExecution } = get();
