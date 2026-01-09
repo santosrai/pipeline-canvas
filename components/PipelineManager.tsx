@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePipelineStore } from '../store/pipelineStore';
+import { useAuthStore } from '../../../stores/authStore';
 import { Pipeline } from '../types/index';
 import { Trash2, Play, Edit2, X } from 'lucide-react';
 
@@ -9,9 +10,20 @@ interface PipelineManagerProps {
 }
 
 export const PipelineManager: React.FC<PipelineManagerProps> = ({ isOpen, onClose }) => {
-  const { savedPipelines, loadPipeline, deletePipeline } = usePipelineStore();
+  const { savedPipelines, loadPipeline, deletePipeline, syncPipelines } = usePipelineStore();
+  const user = useAuthStore((state) => state.user);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+
+  // Sync pipelines from backend when modal opens and user is authenticated
+  useEffect(() => {
+    if (isOpen && user) {
+      console.log('[PipelineManager] Syncing pipelines from backend...');
+      syncPipelines().catch((error) => {
+        console.error('[PipelineManager] Failed to sync pipelines:', error);
+      });
+    }
+  }, [isOpen, user, syncPipelines]);
 
   if (!isOpen) return null;
 

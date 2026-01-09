@@ -590,18 +590,22 @@ export const usePipelineStore = create<PipelineState>()(
       syncPipelines: async () => {
         const user = useAuthStore.getState().user;
         if (!user) {
-          console.log('User not authenticated, skipping pipeline sync');
+          console.log('[syncPipelines] User not authenticated, skipping pipeline sync');
           return;
         }
         
         try {
+          console.log('[syncPipelines] Fetching pipelines from backend for user:', user.id);
           const response = await api.get('/pipelines');
+          console.log('[syncPipelines] API response:', response.data);
           const backendPipelines = response.data.pipelines || [];
+          console.log(`[syncPipelines] Found ${backendPipelines.length} pipelines in backend`);
           
           // Convert dates and parse pipeline_json
           const pipelines: Pipeline[] = await Promise.all(
             backendPipelines.map(async (bp: any) => {
               try {
+                console.log(`[syncPipelines] Loading full pipeline data for: ${bp.id}`);
                 // Fetch full pipeline data
                 const fullResponse = await api.get(`/pipelines/${bp.id}`);
                 const fullPipeline = fullResponse.data.pipeline;
@@ -614,9 +618,13 @@ export const usePipelineStore = create<PipelineState>()(
                   fullPipeline.updatedAt = new Date(fullPipeline.updatedAt);
                 }
                 
+                console.log(`[syncPipelines] Successfully loaded pipeline: ${fullPipeline.name || fullPipeline.id}`);
                 return fullPipeline;
-              } catch (error) {
-                console.error(`Failed to load full pipeline ${bp.id}:`, error);
+              } catch (error: any) {
+                console.error(`[syncPipelines] Failed to load full pipeline ${bp.id}:`, error);
+                if (error.response) {
+                  console.error(`[syncPipelines] Response status: ${error.response.status}`, error.response.data);
+                }
                 return null;
               }
             })
@@ -626,7 +634,7 @@ export const usePipelineStore = create<PipelineState>()(
           const validPipelines = pipelines.filter((p): p is Pipeline => p !== null);
           
           set({ savedPipelines: validPipelines });
-          console.log(`Synced ${validPipelines.length} pipelines from backend`);
+          console.log(`[syncPipelines] Synced ${validPipelines.length} pipelines from backend`);
           
           // Also try to load draft pipeline from backend
           // Look for a pipeline with status='draft' and most recent updated_at
@@ -663,7 +671,11 @@ export const usePipelineStore = create<PipelineState>()(
             }
           }
         } catch (error: any) {
-          console.error('Failed to sync pipelines from backend:', error);
+          console.error('[syncPipelines] Failed to sync pipelines from backend:', error);
+          if (error.response) {
+            console.error('[syncPipelines] Response status:', error.response.status);
+            console.error('[syncPipelines] Response data:', error.response.data);
+          }
         }
       },
       

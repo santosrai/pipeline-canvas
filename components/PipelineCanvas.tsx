@@ -15,6 +15,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { usePipelineStore } from '../store/pipelineStore';
+import { useAuthStore } from '../../../stores/authStore';
 import { PipelineNode, NodeStatus } from '../types/index';
 import { PipelineNodeConfig } from './PipelineNodeConfig';
 import { PipelineNodePalette } from './PipelineNodePalette';
@@ -711,7 +712,19 @@ export const PipelineCanvas: React.FC = () => {
     lastSavedAt,
     isSaving,
     setCurrentPipeline,
+    syncPipelines,
   } = usePipelineStore();
+  const user = useAuthStore((state) => state.user);
+
+  // Sync pipelines from backend when component mounts and user is authenticated
+  React.useEffect(() => {
+    if (user) {
+      console.log('[PipelineCanvas] Syncing pipelines from backend...');
+      syncPipelines().catch((error) => {
+        console.error('[PipelineCanvas] Failed to sync pipelines:', error);
+      });
+    }
+  }, [user, syncPipelines]);
 
   // Memoize nodeTypes to ensure stable reference for React Flow
   const memoizedNodeTypes = useMemo(() => nodeTypes, []);
