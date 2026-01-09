@@ -1,8 +1,7 @@
 import { PluginUIContext } from 'molstar/lib/mol-plugin-ui/context';
 import { createMolstarBuilder, MolstarBuilder } from './molstarBuilder';
 import { useAppStore } from '../stores/appStore';
-import { createMVSBuilder } from 'molstar/lib/extensions/mvs/tree/mvs/mvs-builder';
-import { loadMVS } from 'molstar/lib/extensions/mvs/load';
+import { SandboxExecutor } from './codeExecutorSandbox';
 
 // Cache a single builder per plugin instance so that the currentStructure
 // is preserved across multiple executions (e.g., when AI code modifies
@@ -18,6 +17,7 @@ export interface ExecutionResult {
 export class CodeExecutor {
   private plugin: PluginUIContext;
   private builder: MolstarBuilder;
+  private sandboxExecutor: SandboxExecutor | null = null;
 
   constructor(plugin: PluginUIContext) {
     this.plugin = plugin;
@@ -38,25 +38,72 @@ export class CodeExecutor {
     this.builder = pluginAny[BUILDER_KEY] as MolstarBuilder;
   }
 
+  /**
+   * Extract structure information from code for AI context.
+   * This helps the AI understand what structure is being loaded even when
+   * execution happens in the sandbox.
+   */
+  private extractStructureInfo(code: string): { pdbId?: string; url?: string } | null {
+    if (!code || !code.trim()) return null;
+
+    // Extract PDB ID (4-character code)
+    const pdbIdMatch = code.match(/loadStructure\s*\(\s*['"]([0-9A-Za-z]{4})['"]/);
+    if (pdbIdMatch) {
+      return { pdbId: pdbIdMatch[1].toUpperCase() };
+    }
+
+    // Extract URL (blob, http, https, /api/)
+    const urlMatch = code.match(/loadStructure\s*\(\s*['"](blob:|https?:\/\/|\/api\/[^'"]+)['"]/);
+    if (urlMatch) {
+      return { url: urlMatch[1] };
+    }
+
+    return null;
+  }
+
   async executeCode(code: string): Promise<ExecutionResult> {
     try {
-      // Create a safe execution context
-      const sandbox = this.createSandbox();
+      // Extract structure info from code for AI context
+      const structureInfo = this.extractStructureInfo(code);
+      const setLastLoadedPdb = useAppStore.getState?.().setLastLoadedPdb;
       
-      // Wrap the code in an async function
-      const wrappedCode = `
-        (async function() {
-          ${code}
-        })();
-      `;
-
-      // Execute with timeout
-      await this.executeWithTimeout(wrappedCode, sandbox, 10000);
-      
-      return {
-        success: true,
-        message: 'Code executed successfully'
+      // Create callback to track structure loads
+      const onStructureLoaded = (pdbIdOrUrl: string) => {
+        try {
+          // Check if it's a PDB ID (4 characters, alphanumeric)
+          if (pdbIdOrUrl.length === 4 && /^[0-9A-Za-z]{4}$/.test(pdbIdOrUrl)) {
+            if (typeof setLastLoadedPdb === 'function') {
+              setLastLoadedPdb(pdbIdOrUrl.toUpperCase());
+            }
+          }
+          // For URLs, we could extract file_id from /api/upload/pdb/{file_id} if needed
+        } catch (e) {
+          // Ignore errors
+        }
       };
+
+      // Create or reuse sandbox executor with structure tracking
+      if (!this.sandboxExecutor) {
+        this.sandboxExecutor = new SandboxExecutor(this.plugin, this.builder, onStructureLoaded);
+      } else {
+        // Update callback if executor already exists
+        (this.sandboxExecutor as any).onStructureLoaded = onStructureLoaded;
+      }
+
+      // Execute code in secure sandbox
+      const result = await this.sandboxExecutor.executeCode(code, 10000);
+      
+      // Also set structure info immediately if we extracted it from code
+      // This ensures AI context is available even before execution completes
+      if (structureInfo?.pdbId && typeof setLastLoadedPdb === 'function') {
+        try {
+          setLastLoadedPdb(structureInfo.pdbId);
+        } catch {
+          // ignore
+        }
+      }
+      
+      return result;
 
     } catch (error) {
       return {
@@ -67,107 +114,12 @@ export class CodeExecutor {
     }
   }
 
-  private createSandbox() {
-    
-    return {
-      // Molstar builder API
-      builder: this.builder,
-      plugin: this.plugin,
-      // MolViewSpec fluent builder API
-      mvs: this.createMVSWrapper(),
-      
-      // Safe console
-      console: {
-        log: (...args: any[]) => console.log('[Molstar]', ...args),
-        error: (...args: any[]) => console.error('[Molstar]', ...args),
-        warn: (...args: any[]) => console.warn('[Molstar]', ...args),
-      },
-
-      // Common utilities
-      setTimeout: (fn: Function, delay: number) => {
-        if (delay > 5000) throw new Error('Timeout too long');
-        return setTimeout(fn, delay);
-      },
-
-      // Restricted globals (no access to dangerous APIs)
-      window: undefined,
-      document: undefined,
-      fetch: undefined,
-      XMLHttpRequest: undefined,
-    };
-  }
-
-  private createMVSBuilder() {
-    try {
-      console.log('[MVS] Creating MolViewSpec builder...');
-      const mvsBuilder = createMVSBuilder();
-      console.log('[MVS] MolViewSpec builder created successfully');
-      return mvsBuilder;
-    } catch (e) {
-      console.error('[MVS] Failed to create MolViewSpec builder:', e);
-      return undefined;
+  // Cleanup method for when executor is no longer needed
+  cleanup(): void {
+    if (this.sandboxExecutor) {
+      this.sandboxExecutor.cleanup();
+      this.sandboxExecutor = null;
     }
-  }
-
-  private createMVSWrapper() {
-    const mvsBuilder = this.createMVSBuilder();
-    if (!mvsBuilder) return undefined;
-
-    // Create a wrapper that has all the MVS builder methods plus an apply method
-    const wrapper = Object.create(mvsBuilder);
-    
-    // Add apply method to execute the MVS specification
-    wrapper.apply = async () => {
-      try {
-        console.log('[MVS] Applying MolViewSpec to plugin...');
-        const mvsState = mvsBuilder.getState();
-        console.log('[MVS] MVS State:', mvsState);
-        await loadMVS(this.plugin, mvsState);
-        console.log('[MVS] MolViewSpec applied successfully!');
-      } catch (e) {
-        console.error('[MVS] Failed to apply MolViewSpec:', e);
-        throw e;
-      }
-    };
-
-    return wrapper;
-  }
-
-  private async executeWithTimeout(
-    code: string, 
-    sandbox: any, 
-    timeout: number
-  ): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error('Execution timeout'));
-      }, timeout);
-
-      try {
-        // Create function with sandbox scope
-        const func = new Function(
-          ...Object.keys(sandbox),
-          code
-        );
-
-        // Execute with sandbox values
-        const result = func(...Object.values(sandbox));
-        
-        // Handle promises
-        if (result && typeof result.then === 'function') {
-          result
-            .then(resolve)
-            .catch(reject)
-            .finally(() => clearTimeout(timer));
-        } else {
-          clearTimeout(timer);
-          resolve(result);
-        }
-      } catch (error) {
-        clearTimeout(timer);
-        reject(error);
-      }
-    });
   }
 
   // Generate code from natural language

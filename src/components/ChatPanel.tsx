@@ -1825,21 +1825,19 @@ try {
                     />
                   )}
                   {renderMessageContent(message.content)}
-                  {/* Show uploaded file attachment if the most recent user message before this AI message had one */}
+                  {/* Show uploaded file attachment if the immediately previous message was a user message with a file */}
                   {(() => {
                     const messageIndex = messages.findIndex(m => m.id === message.id);
-                    if (messageIndex < 0) return null;
+                    if (messageIndex <= 0) return null;
                     
-                    // Find the most recent user message before this AI message
-                    for (let i = messageIndex - 1; i >= 0; i--) {
-                      const prevMsg = messages[i];
-                      if (prevMsg.type === 'user' && prevMsg.uploadedFile && isValidUploadedFile(prevMsg.uploadedFile)) {
-                        return (
-                          <div className="mt-3">
-                            {renderFileAttachment(prevMsg.uploadedFile, false)}
-                          </div>
-                        );
-                      }
+                    // Only check the immediately previous message (not all previous messages)
+                    const prevMsg = messages[messageIndex - 1];
+                    if (prevMsg.type === 'user' && prevMsg.uploadedFile && isValidUploadedFile(prevMsg.uploadedFile)) {
+                      return (
+                        <div className="mt-3">
+                          {renderFileAttachment(prevMsg.uploadedFile, false)}
+                        </div>
+                      );
                     }
                     return null;
                   })()}
