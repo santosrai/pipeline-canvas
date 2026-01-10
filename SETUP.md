@@ -45,7 +45,7 @@ When you're ready to publish:
    ```json
    "repository": {
      "type": "git",
-     "url": "git+https://github.com/YOUR_USERNAME/pipeline-canvas.git"
+     "url": "git+https://github.com/santosrai/pipeline-canvas.git"
    }
    ```
 
@@ -69,7 +69,7 @@ When you're ready to publish:
    git add .
    git commit -m "Initial commit: Pipeline Canvas Library"
    git branch -M main
-   git remote add origin git@github.com:YOUR_USERNAME/pipeline-canvas.git
+   git remote add origin git@github.com:santosrai/pipeline-canvas.git
    git push -u origin main
    ```
 
@@ -84,14 +84,14 @@ When you're ready to publish:
 Once published to GitHub, install in other projects:
 
 ```bash
-npm install git+ssh://git@github.com:YOUR_USERNAME/pipeline-canvas.git
+npm install git+ssh://git@github.com:santosrai/pipeline-canvas.git
 ```
 
 Or add to `package.json`:
 ```json
 {
   "dependencies": {
-    "@novoprotein/pipeline-canvas": "git+ssh://git@github.com:YOUR_USERNAME/pipeline-canvas.git"
+    "@novoprotein/pipeline-canvas": "git+ssh://git@github.com:santosrai/pipeline-canvas.git"
   }
 }
 ```

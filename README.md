@@ -7,20 +7,20 @@ A React component library for building visual pipeline/workflow canvases using R
 ### Using SSH (Recommended for Private Repos)
 
 ```bash
-npm install git+ssh://git@github.com:YOUR_USERNAME/pipeline-canvas.git
+npm install git+ssh://git@github.com:santosrai/pipeline-canvas.git
 ```
 
 ### Using HTTPS with Personal Access Token
 
 ```bash
-npm install git+https://YOUR_TOKEN@github.com/YOUR_USERNAME/pipeline-canvas.git
+npm install git+https://YOUR_TOKEN@github.com/santosrai/pipeline-canvas.git
 ```
 
 ### Using Specific Branch or Tag
 
 ```bash
-npm install git+ssh://git@github.com:YOUR_USERNAME/pipeline-canvas.git#main
-npm install git+ssh://git@github.com:YOUR_USERNAME/pipeline-canvas.git#v1.0.0
+npm install git+ssh://git@github.com:santosrai/pipeline-canvas.git#main
+npm install git+ssh://git@github.com:santosrai/pipeline-canvas.git#v1.0.0
 ```
 
 ## Setup
