@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { usePipelineStore, ExecutionLogEntry } from '../store/pipelineStore';
 import { usePipelineContext } from '../context/PipelineContext';
+import { usePipelineTheme } from '../context/ThemeContext';
 import { PipelineNode } from '../types/index';
 import { Trash2, Upload, X, File, ArrowLeft, Play, CheckCircle2, Info, Copy, Search, AlertCircle } from 'lucide-react';
 import { Input } from './ui/input';
@@ -9,6 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+
+// Theme-aware styles matching app's slate color scheme
+const getThemeStyles = (isDark: boolean) => ({
+  panel: { backgroundColor: isDark ? '#1e293b' : '#ffffff' },     // slate-800 / white
+  sidebar: { backgroundColor: isDark ? '#1e293b' : '#ffffff' },   // slate-800 / white
+  toolbar: { backgroundColor: isDark ? '#334155' : '#f8fafc' },   // slate-700 / slate-50
+  content: { backgroundColor: isDark ? '#1e293b' : '#ffffff' },   // slate-800 / white
+  border: { borderColor: isDark ? '#334155' : '#e2e8f0' },        // slate-700 / slate-200
+});
 
 interface PipelineNodeConfigProps {
   nodeId: string;
@@ -101,6 +111,9 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
 }) => {
   const { currentPipeline, currentExecution, executeSingleNode } = usePipelineStore();
   const { getAuthHeaders } = usePipelineContext();
+  const { resolvedTheme } = usePipelineTheme();
+  const isDark = resolvedTheme === 'dark';
+  const themeStyles = getThemeStyles(isDark);
   const node = currentPipeline?.nodes.find((n) => n.id === nodeId);
   
   // Debug: Log when node config changes
@@ -201,7 +214,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
   const hasInputs = node?.type !== 'input_node' && currentPipeline?.edges.some((e) => e.target === nodeId);
 
   if (!node) {
-    return <div className="text-sm text-gray-400">Node not found</div>;
+    return <div className="text-sm text-[hsl(var(--pc-text-muted))]">Node not found</div>;
   }
 
   const handleConfigChange = (key: string, value: any) => {
@@ -373,7 +386,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
     fileInputRef.current?.click();
   };
 
-  const inputClassName = "w-full px-3 py-2 text-sm bg-gray-800/50 border border-gray-600/50 rounded-lg text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-colors";
+  const inputClassName = "w-full px-3 py-2 text-sm bg-[hsl(var(--pc-muted)/0.5)] border border-gray-200 rounded-lg text-[hsl(var(--pc-text-primary))] placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-colors";
 
   const handleExecuteStep = () => {
     // Execute just this node
@@ -386,43 +399,43 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-2">
+              <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 PDB File
               </label>
               <div className="space-y-2">
                 {pendingFile ? (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-gray-800/50 border border-gray-600/50 rounded-lg">
+                  <div className="flex items-center gap-2 px-3 py-2 bg-[hsl(var(--pc-muted)/0.5)] border border-gray-200 rounded-lg">
                     <File className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                    <span className="text-xs text-gray-200 flex-1 truncate" title={pendingFile.name}>
+                    <span className="text-xs text-[hsl(var(--pc-text-primary))] flex-1 truncate" title={pendingFile.name}>
                       {pendingFile.name}
                     </span>
                     {isUploading ? (
-                      <span className="text-xs text-gray-400">Uploading...</span>
+                      <span className="text-xs text-[hsl(var(--pc-text-muted))]">Uploading...</span>
                     ) : (
                       <button
                         type="button"
                         onClick={handleFileCleared}
                         disabled={isUploading}
-                        className="p-1 hover:bg-gray-700/50 rounded disabled:opacity-50 transition-colors"
+                        className="p-1 hover:bg-[hsl(var(--pc-muted)/0.5)] rounded disabled:opacity-50 transition-colors"
                         title="Remove file"
                       >
-                        <X className="w-3 h-3 text-gray-400" />
+                        <X className="w-3 h-3 text-[hsl(var(--pc-text-muted))]" />
                       </button>
                     )}
                   </div>
                 ) : node.config?.filename ? (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-gray-800/30 border border-gray-700/50 rounded-lg">
+                  <div className="flex items-center gap-2 px-3 py-2 bg-[hsl(var(--pc-muted)/0.3)] border border-gray-200 rounded-lg">
                     <File className="w-4 h-4 text-green-400 flex-shrink-0" />
-                    <span className="text-xs text-gray-300 flex-1 truncate" title={node.config.filename}>
+                    <span className="text-xs text-[hsl(var(--pc-text-secondary))] flex-1 truncate" title={node.config.filename}>
                       {node.config.filename}
                     </span>
                     <button
                       type="button"
                       onClick={handleFileCleared}
-                      className="p-1 hover:bg-gray-700/50 rounded transition-colors"
+                      className="p-1 hover:bg-[hsl(var(--pc-muted)/0.5)] rounded transition-colors"
                       title="Remove file"
                     >
-                      <X className="w-3 h-3 text-gray-400" />
+                      <X className="w-3 h-3 text-[hsl(var(--pc-text-muted))]" />
                     </button>
                   </div>
                 ) : (
@@ -431,7 +444,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                     onClick={handleUploadClick}
                     disabled={isUploading}
                     variant="outline"
-                    className="w-full bg-gray-800/50 border-gray-600/50 text-gray-200 hover:bg-gray-800/70"
+                    className="w-full bg-[hsl(var(--pc-muted)/0.5)] border-gray-200 text-[hsl(var(--pc-text-primary))] hover:bg-[hsl(var(--pc-muted)/0.7)]"
                   >
                     <Upload className="w-4 h-4 mr-2" />
                     Upload PDB File
@@ -455,34 +468,34 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
 
             {/* PDB Analysis Results - Display when file is uploaded */}
             {node.config?.filename && node.config?.total_residues && (
-              <div className="space-y-3 pt-2 border-t border-gray-700/50">
+              <div className="space-y-3 pt-2 border-t border-gray-200">
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-2">
+                  <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                     Structure Information
                   </label>
-                  <div className="bg-gray-800/30 rounded-lg p-3 space-y-2 text-xs">
+                  <div className="bg-[hsl(var(--pc-muted)/0.3)] rounded-lg p-3 space-y-2 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Total Residues:</span>
-                      <span className="text-gray-200 font-medium">{node.config.total_residues}</span>
+                      <span className="text-[hsl(var(--pc-text-muted))]">Total Residues:</span>
+                      <span className="text-[hsl(var(--pc-text-primary))] font-medium">{node.config.total_residues}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Atoms:</span>
-                      <span className="text-gray-200 font-medium">{node.config.atoms || 'N/A'}</span>
+                      <span className="text-[hsl(var(--pc-text-muted))]">Atoms:</span>
+                      <span className="text-[hsl(var(--pc-text-primary))] font-medium">{node.config.atoms || 'N/A'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500">Chains:</span>
-                      <span className="text-gray-200 font-medium">
+                      <span className="text-[hsl(var(--pc-text-muted))]">Chains:</span>
+                      <span className="text-[hsl(var(--pc-text-primary))] font-medium">
                         {Array.isArray(node.config.chains) ? node.config.chains.join(', ') : 'N/A'}
                       </span>
                     </div>
                     {node.config.chain_residue_counts && typeof node.config.chain_residue_counts === 'object' && (
-                      <div className="pt-2 border-t border-gray-700/30">
-                        <span className="text-gray-500 block mb-1">Residues per Chain:</span>
+                      <div className="pt-2 border-t border-gray-200">
+                        <span className="text-[hsl(var(--pc-text-muted))] block mb-1">Residues per Chain:</span>
                         <div className="space-y-1">
                           {Object.entries(node.config.chain_residue_counts).map(([chain, count]) => (
                             <div key={chain} className="flex justify-between pl-2">
-                              <span className="text-gray-400">Chain {chain}:</span>
-                              <span className="text-gray-200">{count as number} residues</span>
+                              <span className="text-[hsl(var(--pc-text-muted))]">Chain {chain}:</span>
+                              <span className="text-[hsl(var(--pc-text-primary))]">{count as number} residues</span>
                             </div>
                           ))}
                         </div>
@@ -494,17 +507,17 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                 {/* Suggested RFdiffusion Parameters */}
                 {node.config?.suggested_contigs && (
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-2">
+                    <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                       Suggested RFdiffusion Parameters
                     </label>
                     <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3 space-y-2 text-xs">
                       <div className="flex items-start gap-2">
                         <span className="text-blue-400 font-medium">Contigs:</span>
-                        <code className="flex-1 text-blue-300 bg-gray-900/50 px-2 py-1 rounded font-mono">
+                        <code className="flex-1 text-blue-300 bg-[hsl(var(--pc-background)/0.5)] px-2 py-1 rounded font-mono">
                           {node.config.suggested_contigs}
                         </code>
                       </div>
-                      <p className="text-gray-400 text-xs mt-2">
+                      <p className="text-[hsl(var(--pc-text-muted))] text-xs mt-2">
                         This suggestion is based on your PDB structure. You can use this value in RFdiffusion nodes connected to this input.
                       </p>
                     </div>
@@ -520,7 +533,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
           <div className="space-y-4">
             {/* HTTP Method */}
             <div>
-              <Label className="text-xs font-medium text-gray-400 mb-2">
+              <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 Method
               </Label>
               <Select
@@ -542,7 +555,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
 
             {/* URL */}
             <div>
-              <Label className="text-xs font-medium text-gray-400 mb-2">
+              <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 URL
               </Label>
               <Input
@@ -555,7 +568,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <p className="text-xs text-gray-500 mt-1.5 cursor-help">
+                    <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5 cursor-help">
                       API endpoint URL (relative or absolute)
                     </p>
                   </TooltipTrigger>
@@ -568,7 +581,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
 
             {/* API Key */}
             <div>
-              <Label className="text-xs font-medium text-gray-400 mb-2">
+              <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 API Key
               </Label>
               <Input
@@ -578,14 +591,14 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                 className={inputClassName}
                 placeholder="Enter NVIDIA API key (optional)"
               />
-              <p className="text-xs text-gray-500 mt-1.5">
+              <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                 Leave empty to use global API key from settings
               </p>
             </div>
 
             {/* Design Mode */}
             <div>
-              <Label className="text-xs font-medium text-gray-400 mb-2">
+              <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 Design Mode
               </Label>
               <Select
@@ -601,14 +614,14 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                   <SelectItem value="partial_diffusion">Partial Diffusion</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-gray-500 mt-1.5">
+              <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                 Unconditional: new proteins | Motif: around structures | Partial: modify regions
               </p>
             </div>
 
             {/* PDB ID */}
             <div>
-              <Label className="text-xs font-medium text-gray-400 mb-2">
+              <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 PDB ID (optional)
               </Label>
               <Input
@@ -618,14 +631,14 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                 className={inputClassName}
                 placeholder="e.g., 1R42"
               />
-              <p className="text-xs text-gray-500 mt-1.5">
+              <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                 Optional PDB ID to use as template (4-character code)
               </p>
             </div>
 
             {/* Contigs */}
             <div>
-              <Label className="text-xs font-medium text-gray-400 mb-2">
+              <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 Contigs *
               </Label>
               <Input
@@ -635,14 +648,14 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                 className={inputClassName}
                 placeholder="A50-150"
               />
-              <p className="text-xs text-gray-500 mt-1.5">
+              <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                 Contig specification (e.g., "A50-150" or "A20-60/0 50-100")
               </p>
             </div>
 
             {/* Hotspot Residues */}
             <div>
-              <Label className="text-xs font-medium text-gray-400 mb-2">
+              <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 Hotspot Residues (optional)
               </Label>
               <Input
@@ -652,14 +665,14 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                 className={inputClassName}
                 placeholder="A50, A51, A52"
               />
-              <p className="text-xs text-gray-500 mt-1.5">
+              <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                 Comma-separated list of residues to preserve (e.g., "A50, A51, A52")
               </p>
             </div>
 
             {/* Diffusion Steps */}
             <div>
-              <Label className="text-xs font-medium text-gray-400 mb-2">
+              <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 Diffusion Steps
               </Label>
               <Input
@@ -670,14 +683,14 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                 onChange={(e) => handleConfigChange('diffusion_steps', parseInt(e.target.value) || 15)}
                 className={inputClassName}
               />
-              <p className="text-xs text-gray-500 mt-1.5">
+              <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                 Number of diffusion steps (1-100, higher = better quality but slower)
               </p>
             </div>
 
             {/* Number of Designs */}
             <div>
-              <Label className="text-xs font-medium text-gray-400 mb-2">
+              <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 Number of Designs
               </Label>
               <Input
@@ -688,7 +701,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                 onChange={(e) => handleConfigChange('num_designs', parseInt(e.target.value) || 1)}
                 className={inputClassName}
               />
-              <p className="text-xs text-gray-500 mt-1.5">
+              <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                 Number of design variants to generate (1-10)
               </p>
             </div>
@@ -696,10 +709,10 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
             {/* Send Query Parameters Toggle */}
             <div className="flex items-center justify-between">
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Send Query Parameters
                 </label>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-[hsl(var(--pc-text-muted))]">
                   Include query parameters in the URL
                 </p>
               </div>
@@ -710,14 +723,14 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                   onChange={(e) => handleConfigChange('send_query_params', e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                <div className="w-11 h-6 bg-[hsl(var(--pc-muted))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
               </label>
             </div>
 
             {/* Query Parameters (shown if toggle is on) */}
             {node.config?.send_query_params && (
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Query Parameters
                 </label>
                 <textarea
@@ -727,7 +740,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                   rows={3}
                   placeholder='{"key": "value"}'
                 />
-                <p className="text-xs text-gray-500 mt-1.5">
+                <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                   JSON object with query parameters
                 </p>
               </div>
@@ -736,10 +749,10 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
             {/* Send Headers Toggle */}
             <div className="flex items-center justify-between">
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Send Headers
                 </label>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-[hsl(var(--pc-text-muted))]">
                   Include custom headers in the request
                 </p>
               </div>
@@ -750,14 +763,14 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                   onChange={(e) => handleConfigChange('send_headers', e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                <div className="w-11 h-6 bg-[hsl(var(--pc-muted))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
               </label>
             </div>
 
             {/* Custom Headers (shown if toggle is on) */}
             {node.config?.send_headers !== false && (
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Custom Headers
                 </label>
                 <textarea
@@ -767,7 +780,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                   rows={3}
                   placeholder='{"Content-Type": "application/json"}'
                 />
-                <p className="text-xs text-gray-500 mt-1.5">
+                <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                   JSON object with custom headers
                 </p>
               </div>
@@ -776,10 +789,10 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
             {/* Send Body Toggle */}
             <div className="flex items-center justify-between">
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Send Body
                 </label>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-[hsl(var(--pc-text-muted))]">
                   Include request body
                 </p>
               </div>
@@ -790,7 +803,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                   onChange={(e) => handleConfigChange('send_body', e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                <div className="w-11 h-6 bg-[hsl(var(--pc-muted))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
               </label>
             </div>
 
@@ -799,7 +812,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
               <>
                 {/* Body Content Type */}
                 <div>
-                  <Label className="text-xs font-medium text-gray-400 mb-2">
+                  <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                     Body Content Type
                   </Label>
                   <Select
@@ -820,7 +833,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
 
                 {/* Specify Body */}
                 <div>
-                  <Label className="text-xs font-medium text-gray-400 mb-2">
+                  <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                     Specify Body
                   </Label>
                   <Select
@@ -840,7 +853,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
 
                 {/* JSON Body */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-2">
+                  <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                     JSON
                   </label>
                   <textarea
@@ -850,7 +863,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                     rows={6}
                     placeholder='{"pdb_file": "{{input.target}}", "contigs": "{{config.contigs}}"}'
                   />
-                  <p className="text-xs text-gray-500 mt-1.5">
+                  <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                     JSON body content (supports template variables like {"{{input.target}}"})
                   </p>
                 </div>
@@ -858,11 +871,11 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
             )}
 
             {/* Legacy Fields (for backwards compatibility) */}
-            <div className="border-t border-gray-700 pt-4 mt-4">
-              <p className="text-xs font-medium text-gray-400 mb-3">Legacy Parameters</p>
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <p className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-3">Legacy Parameters</p>
               
               <div>
-                <Label className="text-xs font-medium text-gray-400 mb-2">
+                <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Contigs
                 </Label>
                 <Input
@@ -872,13 +885,13 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
                   className={inputClassName}
                   placeholder="50"
                 />
-                <p className="text-xs text-gray-500 mt-1.5">
+                <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                   Contig specification (e.g., "50" or "A1-50")
                 </p>
               </div>
 
               <div className="mt-4">
-                <Label className="text-xs font-medium text-gray-400 mb-2">
+                <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Number of Designs
                 </Label>
                 <Input
@@ -898,7 +911,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
         return (
           <div className="space-y-4">
             <div>
-              <Label className="text-xs font-medium text-gray-400 mb-2">
+              <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 Number of Sequences
               </Label>
               <Input
@@ -911,7 +924,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
               />
             </div>
             <div>
-              <Label className="text-xs font-medium text-gray-400 mb-2">
+              <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 Temperature
               </Label>
               <Input
@@ -931,7 +944,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
         return (
           <div className="space-y-4">
             <div>
-              <Label className="text-xs font-medium text-gray-400 mb-2">
+              <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 Recycle Count
               </Label>
               <Input
@@ -944,7 +957,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
               />
             </div>
             <div>
-              <Label className="text-xs font-medium text-gray-400 mb-2">
+              <Label className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 Number of Relax Steps
               </Label>
               <Input
@@ -964,7 +977,7 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
           <div className="space-y-4">
             {/* Code Editor */}
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-2">
+              <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 Code
               </label>
               <textarea
@@ -989,7 +1002,7 @@ return {
   configKeys: Object.keys(config)
 };`}
               />
-              <p className="text-xs text-gray-500 mt-1.5">
+              <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                 JavaScript code to execute. Use 'input' for input data, 'config' for node config, and 'node' for node metadata. Return the result.
               </p>
               <div className="mt-2 px-3 py-2 bg-yellow-900/20 border border-yellow-700/30 rounded-lg">
@@ -1001,8 +1014,8 @@ return {
 
             {/* Message Field (Optional) */}
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-2">
-                Message <span className="text-gray-600">(Optional)</span>
+              <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
+                Message <span className="text-[hsl(var(--pc-text-muted))]">(Optional)</span>
               </label>
               <input
                 type="text"
@@ -1011,7 +1024,7 @@ return {
                 className={inputClassName}
                 placeholder="Enter a message..."
               />
-              <p className="text-xs text-gray-500 mt-1.5">
+              <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                 Optional message that can be accessed in code via config.message
               </p>
             </div>
@@ -1023,7 +1036,7 @@ return {
           <div className="space-y-4">
             {/* HTTP Method */}
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-2">
+              <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 Method
               </label>
               <select
@@ -1043,7 +1056,7 @@ return {
 
             {/* URL */}
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-2">
+              <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 URL
               </label>
               <input
@@ -1053,14 +1066,14 @@ return {
                 className={inputClassName}
                 placeholder="https://api.example.com/endpoint"
               />
-              <p className="text-xs text-gray-500 mt-1.5">
+              <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                 Full URL for the HTTP request (supports template variables like {"{{input.field}}"})
               </p>
             </div>
 
             {/* Authentication */}
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-2">
+              <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                 Authentication
               </label>
               <select
@@ -1079,7 +1092,7 @@ return {
             {node.config?.authentication === 'basic' && (
               <>
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-2">
+                  <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                     Username
                   </label>
                   <input
@@ -1091,7 +1104,7 @@ return {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-2">
+                  <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                     Password
                   </label>
                   <input
@@ -1108,7 +1121,7 @@ return {
             {/* Bearer Token Field */}
             {node.config?.authentication === 'bearer' && (
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Bearer Token
                 </label>
                 <input
@@ -1125,7 +1138,7 @@ return {
             {node.config?.authentication === 'custom' && (
               <>
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-2">
+                  <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                     Header Name
                   </label>
                   <input
@@ -1137,7 +1150,7 @@ return {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-2">
+                  <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                     Header Value
                   </label>
                   <input
@@ -1154,10 +1167,10 @@ return {
             {/* Send Query Parameters Toggle */}
             <div className="flex items-center justify-between">
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Send Query Parameters
                 </label>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-[hsl(var(--pc-text-muted))]">
                   Include query parameters in the URL
                 </p>
               </div>
@@ -1168,14 +1181,14 @@ return {
                   onChange={(e) => handleConfigChange('send_query_params', e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-[hsl(var(--pc-muted))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
             </div>
 
             {/* Query Parameters (shown if toggle is on) */}
             {node.config?.send_query_params && (
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Query Parameters
                 </label>
                 <textarea
@@ -1185,7 +1198,7 @@ return {
                   rows={3}
                   placeholder='{"key": "value", "page": 1}'
                 />
-                <p className="text-xs text-gray-500 mt-1.5">
+                <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                   JSON object with query parameters
                 </p>
               </div>
@@ -1194,10 +1207,10 @@ return {
             {/* Send Headers Toggle */}
             <div className="flex items-center justify-between">
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Send Headers
                 </label>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-[hsl(var(--pc-text-muted))]">
                   Include custom headers in the request
                 </p>
               </div>
@@ -1208,14 +1221,14 @@ return {
                   onChange={(e) => handleConfigChange('send_headers', e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-[hsl(var(--pc-muted))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
             </div>
 
             {/* Custom Headers (shown if toggle is on) */}
             {node.config?.send_headers && (
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Custom Headers
                 </label>
                 <textarea
@@ -1225,7 +1238,7 @@ return {
                   rows={3}
                   placeholder='{"Content-Type": "application/json", "X-Custom-Header": "value"}'
                 />
-                <p className="text-xs text-gray-500 mt-1.5">
+                <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                   JSON object with custom headers
                 </p>
               </div>
@@ -1234,10 +1247,10 @@ return {
             {/* Send Body Toggle */}
             <div className="flex items-center justify-between">
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Send Body
                 </label>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-[hsl(var(--pc-text-muted))]">
                   Include request body (only for POST, PUT, PATCH methods)
                 </p>
               </div>
@@ -1248,7 +1261,7 @@ return {
                   onChange={(e) => handleConfigChange('send_body', e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <div className="w-11 h-6 bg-[hsl(var(--pc-muted))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
             </div>
 
@@ -1257,7 +1270,7 @@ return {
               <>
                 {/* Body Content Type */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-2">
+                  <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                     Body Content Type
                   </label>
                   <select
@@ -1277,7 +1290,7 @@ return {
                 {/* Specify Body */}
                 {(node.config?.body_content_type === 'json' || !node.config?.body_content_type) && (
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-2">
+                    <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                       Specify Body
                     </label>
                     <select
@@ -1295,7 +1308,7 @@ return {
                 {/* JSON Body */}
                 {(node.config?.body_content_type === 'json' || !node.config?.body_content_type) && (
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-2">
+                    <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                       JSON
                     </label>
                     <textarea
@@ -1305,7 +1318,7 @@ return {
                       rows={6}
                       placeholder='{"key": "value"} or use template variables like {{input.field}}'
                     />
-                    <p className="text-xs text-gray-500 mt-1.5">
+                    <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                       JSON body content (supports template variables like {"{{input.field}}"})
                     </p>
                   </div>
@@ -1316,7 +1329,7 @@ return {
                   node.config?.body_content_type === 'text' || 
                   node.config?.body_content_type === 'xml') && (
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-2">
+                    <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                       Raw Body
                     </label>
                     <textarea
@@ -1326,7 +1339,7 @@ return {
                       rows={6}
                       placeholder="Raw body content"
                     />
-                    <p className="text-xs text-gray-500 mt-1.5">
+                    <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                       Raw body content (for raw, text, or XML content types)
                     </p>
                   </div>
@@ -1335,11 +1348,11 @@ return {
             )}
 
             {/* Options Section */}
-            <div className="border-t border-gray-700 pt-4 mt-4">
-              <p className="text-xs font-medium text-gray-400 mb-3">Options</p>
+            <div className="border-t border-gray-200 pt-4 mt-4">
+              <p className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-3">Options</p>
               
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                   Timeout (ms)
                 </label>
                 <input
@@ -1350,17 +1363,17 @@ return {
                   min="1000"
                   max="300000"
                 />
-                <p className="text-xs text-gray-500 mt-1.5">
+                <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                   Request timeout in milliseconds (default: 30000)
                 </p>
               </div>
 
               <div className="mt-4 flex items-center justify-between">
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-2">
+                  <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                     Follow Redirects
                   </label>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-[hsl(var(--pc-text-muted))]">
                     Automatically follow HTTP redirects
                   </p>
                 </div>
@@ -1371,16 +1384,16 @@ return {
                     onChange={(e) => handleConfigChange('options_follow_redirects', e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-[hsl(var(--pc-muted))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                 </label>
               </div>
 
               <div className="mt-4 flex items-center justify-between">
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-2">
+                  <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                     Ignore SSL Errors
                   </label>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-[hsl(var(--pc-text-muted))]">
                     Ignore SSL certificate errors (not recommended for production)
                   </p>
                 </div>
@@ -1391,7 +1404,7 @@ return {
                     onChange={(e) => handleConfigChange('options_ignore_ssl_errors', e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-[hsl(var(--pc-muted))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                 </label>
               </div>
             </div>
@@ -1406,28 +1419,28 @@ return {
         );
 
       default:
-        return <div className="text-sm text-gray-400">No configuration available</div>;
+        return <div className="text-sm text-[hsl(var(--pc-text-muted))]">No configuration available</div>;
     }
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e32]">
+    <div className="h-full flex flex-col" style={themeStyles.panel}>
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-700/50 bg-gray-800/30 flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between" style={themeStyles.toolbar}>
         <div className="flex items-center gap-3">
           {onClose && (
             <Button
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-200"
+              className="text-[hsl(var(--pc-text-muted))] hover:text-[hsl(var(--pc-text-primary))]"
             >
               <ArrowLeft className="w-4 h-4" />
             </Button>
           )}
           <div>
-            <h3 className="text-sm font-semibold text-gray-200">{node.label}</h3>
-            <p className="text-xs text-gray-500">{node.type}</p>
+            <h3 className="text-sm font-semibold text-[hsl(var(--pc-text-primary))]">{node.label}</h3>
+            <p className="text-xs text-[hsl(var(--pc-text-muted))]">{node.type}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1444,7 +1457,7 @@ return {
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-200"
+              className="text-[hsl(var(--pc-text-muted))] hover:text-[hsl(var(--pc-text-primary))]"
               title="Close panel"
             >
               <X className="w-4 h-4" />
@@ -1454,13 +1467,13 @@ return {
       </div>
 
       {/* Tabs */}
-      <div className="px-4 border-b border-gray-700/50 flex items-center gap-1">
+      <div className="px-4 border-b border-gray-200 flex items-center gap-1">
         <button
           onClick={() => setActiveTab('parameters')}
           className={`px-3 py-2 text-xs font-medium transition-colors relative ${
             activeTab === 'parameters'
-              ? 'text-gray-200'
-              : 'text-gray-500 hover:text-gray-300'
+              ? 'text-[hsl(var(--pc-text-primary))]'
+              : 'text-[hsl(var(--pc-text-muted))] hover:text-[hsl(var(--pc-text-secondary))]'
           }`}
         >
           Parameters
@@ -1472,8 +1485,8 @@ return {
           onClick={() => setActiveTab('settings')}
           className={`px-3 py-2 text-xs font-medium transition-colors relative ${
             activeTab === 'settings'
-              ? 'text-gray-200'
-              : 'text-gray-500 hover:text-gray-300'
+              ? 'text-[hsl(var(--pc-text-primary))]'
+              : 'text-[hsl(var(--pc-text-muted))] hover:text-[hsl(var(--pc-text-secondary))]'
           }`}
         >
           Settings
@@ -1485,8 +1498,8 @@ return {
           onClick={() => setActiveTab('output')}
           className={`px-3 py-2 text-xs font-medium transition-colors relative ${
             activeTab === 'output'
-              ? 'text-gray-200'
-              : 'text-gray-500 hover:text-gray-300'
+              ? 'text-[hsl(var(--pc-text-primary))]'
+              : 'text-[hsl(var(--pc-text-muted))] hover:text-[hsl(var(--pc-text-secondary))]'
           }`}
         >
           Output
@@ -1496,7 +1509,7 @@ return {
         </button>
         <a
           href="#"
-          className="ml-auto text-xs text-gray-500 hover:text-gray-400 transition-colors"
+          className="ml-auto text-xs text-[hsl(var(--pc-text-muted))] hover:text-[hsl(var(--pc-text-secondary))] transition-colors"
         >
           Docs
         </a>
@@ -1505,9 +1518,9 @@ return {
       {/* Main content - Three panel layout (INPUT | Configuration | OUTPUT) */}
       <div className="flex-1 flex min-h-0">
         {/* Left: INPUT Panel */}
-        <div className="w-[25%] min-w-[200px] max-w-[300px] border-r border-gray-700/50 bg-[#1a1a2e] flex flex-col flex-shrink-0">
-          <div className="px-4 py-3 border-b border-gray-700/50 bg-[#1e1e32]">
-            <h3 className="text-sm font-semibold text-gray-200">INPUT</h3>
+        <div className="w-[25%] min-w-[200px] max-w-[300px] border-r border-gray-200 flex flex-col flex-shrink-0" style={themeStyles.sidebar}>
+          <div className="px-4 py-3 border-b border-gray-200" style={themeStyles.toolbar}>
+            <h3 className="text-sm font-semibold text-[hsl(var(--pc-text-primary))]">INPUT</h3>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             {hasInputs && inputData ? (
@@ -1516,48 +1529,48 @@ return {
                   <>
                     {inputData.filename && (
                       <div>
-                        <div className="text-xs font-medium text-gray-400 mb-1">File</div>
-                        <div className="text-xs text-gray-300 bg-gray-800/50 px-2 py-1 rounded">
+                        <div className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-1">File</div>
+                        <div className="text-xs text-[hsl(var(--pc-text-secondary))] bg-[hsl(var(--pc-muted)/0.5)] px-2 py-1 rounded">
                           {inputData.filename}
                         </div>
                       </div>
                     )}
                     {inputData.chains && Array.isArray(inputData.chains) && (
                       <div>
-                        <div className="text-xs font-medium text-gray-400 mb-1">Chains</div>
-                        <div className="text-xs text-gray-300 bg-gray-800/50 px-2 py-1 rounded">
+                        <div className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-1">Chains</div>
+                        <div className="text-xs text-[hsl(var(--pc-text-secondary))] bg-[hsl(var(--pc-muted)/0.5)] px-2 py-1 rounded">
                           {inputData.chains.join(', ')}
                         </div>
                       </div>
                     )}
                     {inputData.total_residues && (
                       <div>
-                        <div className="text-xs font-medium text-gray-400 mb-1">Total Residues</div>
-                        <div className="text-xs text-gray-300 bg-gray-800/50 px-2 py-1 rounded">
+                        <div className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-1">Total Residues</div>
+                        <div className="text-xs text-[hsl(var(--pc-text-secondary))] bg-[hsl(var(--pc-muted)/0.5)] px-2 py-1 rounded">
                           {inputData.total_residues}
                         </div>
                       </div>
                     )}
                     {inputData.suggested_contigs && (
                       <div>
-                        <div className="text-xs font-medium text-gray-400 mb-1">Suggested Contigs</div>
+                        <div className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-1">Suggested Contigs</div>
                         <div className="text-xs text-blue-300 bg-blue-900/20 border border-blue-700/30 px-2 py-1 rounded font-mono">
                           {inputData.suggested_contigs}
                         </div>
                       </div>
                     )}
                     {sourceNode && (
-                      <div className="pt-2 border-t border-gray-700/30">
-                        <div className="text-xs font-medium text-gray-400 mb-1">From Node</div>
-                        <div className="text-xs text-gray-300">{sourceNode.label}</div>
+                      <div className="pt-2 border-t border-gray-200">
+                        <div className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-1">From Node</div>
+                        <div className="text-xs text-[hsl(var(--pc-text-secondary))]">{sourceNode.label}</div>
                       </div>
                     )}
                   </>
                 )}
                 {inputData.type === 'sequence' && (
                   <div>
-                    <div className="text-xs font-medium text-gray-400 mb-1">Sequence</div>
-                    <div className="text-xs text-gray-300 bg-gray-800/50 px-2 py-1 rounded font-mono break-all">
+                    <div className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-1">Sequence</div>
+                    <div className="text-xs text-[hsl(var(--pc-text-secondary))] bg-[hsl(var(--pc-muted)/0.5)] px-2 py-1 rounded font-mono break-all">
                       {inputData.sequence?.substring(0, 100)}
                       {inputData.sequence?.length > 100 ? '...' : ''}
                     </div>
@@ -1566,14 +1579,14 @@ return {
                 {/* Generic JSON/object data display for code execution nodes */}
                 {(!inputData.type || inputData.type === 'any' || node?.type === 'message_input_node') && (
                   <div className="space-y-2">
-                    <div className="text-xs font-medium text-gray-400 mb-2">Input Data</div>
-                    <pre className="text-xs text-gray-300 bg-gray-800/50 px-3 py-2 rounded font-mono overflow-x-auto max-h-96 overflow-y-auto">
+                    <div className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">Input Data</div>
+                    <pre className="text-xs text-[hsl(var(--pc-text-secondary))] bg-[hsl(var(--pc-muted)/0.5)] px-3 py-2 rounded font-mono overflow-x-auto max-h-96 overflow-y-auto">
                       {JSON.stringify(inputData, null, 2)}
                     </pre>
                     {sourceNode && (
-                      <div className="pt-2 border-t border-gray-700/30">
-                        <div className="text-xs font-medium text-gray-400 mb-1">From Node</div>
-                        <div className="text-xs text-gray-300">{sourceNode.label}</div>
+                      <div className="pt-2 border-t border-gray-200">
+                        <div className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-1">From Node</div>
+                        <div className="text-xs text-[hsl(var(--pc-text-secondary))]">{sourceNode.label}</div>
                       </div>
                     )}
                   </div>
@@ -1582,17 +1595,17 @@ return {
             ) : (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center">
-                  <p className="text-xs text-gray-500 mb-2">No input data yet</p>
+                  <p className="text-xs text-[hsl(var(--pc-text-muted))] mb-2">No input data yet</p>
                   {hasInputs && (
                     <>
                       <button
                         onClick={handleExecuteStep}
-                        className="text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                        className="text-xs text-[hsl(var(--pc-text-muted))] hover:text-[hsl(var(--pc-text-secondary))] transition-colors"
                         title="Execute previous nodes"
                       >
                         Execute previous nodes
                       </button>
-                      <p className="text-xs text-gray-600 mt-1">(From the earliest node that needs it ?)</p>
+                      <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1">(From the earliest node that needs it ?)</p>
                     </>
                   )}
                 </div>
@@ -1602,7 +1615,7 @@ return {
         </div>
 
         {/* Middle: Configuration */}
-        <div className="flex-1 border-r border-gray-700/50 overflow-y-auto bg-[#1e1e32]">
+        <div className="flex-1 border-r border-gray-200 overflow-y-auto" style={themeStyles.content}>
           <div className="p-4 space-y-4">
             {activeTab === 'parameters' ? (
               <>
@@ -1613,22 +1626,22 @@ return {
                 {nodeLog ? (
                   <>
                     {/* Execution Status */}
-                    <div className="border border-gray-700/50 rounded-lg p-3 bg-gray-800/30">
+                    <div className="border border-gray-200 rounded-lg p-3 bg-[hsl(var(--pc-muted)/0.3)]">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-gray-400">Status</span>
+                        <span className="text-xs font-medium text-[hsl(var(--pc-text-muted))]">Status</span>
                         <span className={`text-xs font-semibold ${
                           (nodeLog.status === 'success' || nodeLog.status === 'completed') ? 'text-green-400' :
                           nodeLog.status === 'error' ? 'text-red-400' :
                           nodeLog.status === 'running' ? 'text-blue-400' :
-                          'text-gray-400'
+                          'text-[hsl(var(--pc-text-muted))]'
                         }`}>
                           {nodeLog.status.toUpperCase()}
                         </span>
                       </div>
                       {nodeLog.duration !== undefined && (
                         <div className="flex items-center justify-between mt-2">
-                          <span className="text-xs text-gray-500">Duration</span>
-                          <span className="text-xs text-gray-300 font-mono">
+                          <span className="text-xs text-[hsl(var(--pc-text-muted))]">Duration</span>
+                          <span className="text-xs text-[hsl(var(--pc-text-secondary))] font-mono">
                             {nodeLog.duration}ms
                           </span>
                         </div>
@@ -1637,39 +1650,39 @@ return {
 
                     {/* Request Details */}
                     {nodeLog.request && (
-                      <div className="border border-gray-700/50 rounded-lg overflow-hidden">
-                        <div className="px-3 py-2 bg-gray-800/30 border-b border-gray-700/50">
-                          <span className="text-xs font-medium text-gray-300">Request</span>
+                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                        <div className="px-3 py-2 bg-[hsl(var(--pc-muted)/0.3)] border-b border-gray-200">
+                          <span className="text-xs font-medium text-[hsl(var(--pc-text-secondary))]">Request</span>
                         </div>
                         <div className="p-3 space-y-2">
                           {nodeLog.request.method && nodeLog.request.url && (
                             <div>
-                              <span className="text-xs text-gray-500">Method & URL</span>
-                              <div className="mt-1 text-xs font-mono text-gray-300 bg-gray-900/50 px-2 py-1 rounded">
+                              <span className="text-xs text-[hsl(var(--pc-text-muted))]">Method & URL</span>
+                              <div className="mt-1 text-xs font-mono text-[hsl(var(--pc-text-secondary))] bg-[hsl(var(--pc-background)/0.5)] px-2 py-1 rounded">
                                 {nodeLog.request.method} {nodeLog.request.url}
                               </div>
                             </div>
                           )}
                           {nodeLog.request.headers && Object.keys(nodeLog.request.headers).length > 0 && (
                             <div>
-                              <span className="text-xs text-gray-500">Headers</span>
-                              <pre className="mt-1 text-xs font-mono text-gray-300 bg-gray-900/50 px-2 py-1 rounded overflow-x-auto">
+                              <span className="text-xs text-[hsl(var(--pc-text-muted))]">Headers</span>
+                              <pre className="mt-1 text-xs font-mono text-[hsl(var(--pc-text-secondary))] bg-[hsl(var(--pc-background)/0.5)] px-2 py-1 rounded overflow-x-auto">
                                 {JSON.stringify(nodeLog.request.headers, null, 2)}
                               </pre>
                             </div>
                           )}
                           {nodeLog.request.queryParams && Object.keys(nodeLog.request.queryParams).length > 0 && (
                             <div>
-                              <span className="text-xs text-gray-500">Query Parameters</span>
-                              <pre className="mt-1 text-xs font-mono text-gray-300 bg-gray-900/50 px-2 py-1 rounded overflow-x-auto">
+                              <span className="text-xs text-[hsl(var(--pc-text-muted))]">Query Parameters</span>
+                              <pre className="mt-1 text-xs font-mono text-[hsl(var(--pc-text-secondary))] bg-[hsl(var(--pc-background)/0.5)] px-2 py-1 rounded overflow-x-auto">
                                 {JSON.stringify(nodeLog.request.queryParams, null, 2)}
                               </pre>
                             </div>
                           )}
                           {nodeLog.request.body && (
                             <div>
-                              <span className="text-xs text-gray-500">Body</span>
-                              <pre className="mt-1 text-xs font-mono text-gray-300 bg-gray-900/50 px-2 py-1 rounded overflow-x-auto max-h-48 overflow-y-auto">
+                              <span className="text-xs text-[hsl(var(--pc-text-muted))]">Body</span>
+                              <pre className="mt-1 text-xs font-mono text-[hsl(var(--pc-text-secondary))] bg-[hsl(var(--pc-background)/0.5)] px-2 py-1 rounded overflow-x-auto max-h-48 overflow-y-auto">
                                 {JSON.stringify(nodeLog.request.body, null, 2)}
                               </pre>
                             </div>
@@ -1680,14 +1693,14 @@ return {
 
                     {/* Response Details */}
                     {nodeLog.response && (
-                      <div className="border border-gray-700/50 rounded-lg overflow-hidden">
-                        <div className="px-3 py-2 bg-gray-800/30 border-b border-gray-700/50">
-                          <span className="text-xs font-medium text-gray-300">Response</span>
+                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                        <div className="px-3 py-2 bg-[hsl(var(--pc-muted)/0.3)] border-b border-gray-200">
+                          <span className="text-xs font-medium text-[hsl(var(--pc-text-secondary))]">Response</span>
                         </div>
                         <div className="p-3 space-y-2">
                           {nodeLog.response.status && (
                             <div>
-                              <span className="text-xs text-gray-500">Status</span>
+                              <span className="text-xs text-[hsl(var(--pc-text-muted))]">Status</span>
                               <div className={`mt-1 text-xs font-mono px-2 py-1 rounded ${
                                 nodeLog.response.status >= 200 && nodeLog.response.status < 300
                                   ? 'text-green-400 bg-green-900/20'
@@ -1699,16 +1712,16 @@ return {
                           )}
                           {nodeLog.response.headers && Object.keys(nodeLog.response.headers).length > 0 && (
                             <div>
-                              <span className="text-xs text-gray-500">Headers</span>
-                              <pre className="mt-1 text-xs font-mono text-gray-300 bg-gray-900/50 px-2 py-1 rounded overflow-x-auto">
+                              <span className="text-xs text-[hsl(var(--pc-text-muted))]">Headers</span>
+                              <pre className="mt-1 text-xs font-mono text-[hsl(var(--pc-text-secondary))] bg-[hsl(var(--pc-background)/0.5)] px-2 py-1 rounded overflow-x-auto">
                                 {JSON.stringify(nodeLog.response.headers, null, 2)}
                               </pre>
                             </div>
                           )}
                           {nodeLog.response.data && (
                             <div>
-                              <span className="text-xs text-gray-500">Data</span>
-                              <pre className="mt-1 text-xs font-mono text-gray-300 bg-gray-900/50 px-2 py-1 rounded overflow-x-auto max-h-64 overflow-y-auto">
+                              <span className="text-xs text-[hsl(var(--pc-text-muted))]">Data</span>
+                              <pre className="mt-1 text-xs font-mono text-[hsl(var(--pc-text-secondary))] bg-[hsl(var(--pc-background)/0.5)] px-2 py-1 rounded overflow-x-auto max-h-64 overflow-y-auto">
                                 {JSON.stringify(nodeLog.response.data, null, 2)}
                               </pre>
                             </div>
@@ -1719,12 +1732,12 @@ return {
 
                     {/* Output Data */}
                     {nodeLog.output && (
-                      <div className="border border-gray-700/50 rounded-lg overflow-hidden">
-                        <div className="px-3 py-2 bg-gray-800/30 border-b border-gray-700/50">
-                          <span className="text-xs font-medium text-gray-300">Output</span>
+                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                        <div className="px-3 py-2 bg-[hsl(var(--pc-muted)/0.3)] border-b border-gray-200">
+                          <span className="text-xs font-medium text-[hsl(var(--pc-text-secondary))]">Output</span>
                         </div>
                         <div className="p-3">
-                          <pre className="text-xs font-mono text-gray-300 bg-gray-900/50 px-2 py-1 rounded overflow-x-auto max-h-64 overflow-y-auto">
+                          <pre className="text-xs font-mono text-[hsl(var(--pc-text-secondary))] bg-[hsl(var(--pc-background)/0.5)] px-2 py-1 rounded overflow-x-auto max-h-64 overflow-y-auto">
                             {JSON.stringify(nodeLog.output, null, 2)}
                           </pre>
                         </div>
@@ -1748,8 +1761,8 @@ return {
                 ) : (
                   <div className="h-full flex items-center justify-center py-12">
                     <div className="text-center">
-                      <p className="text-xs text-gray-500 mb-2">No execution logs yet</p>
-                      <p className="text-xs text-gray-600">Execute the node to see request/response details</p>
+                      <p className="text-xs text-[hsl(var(--pc-text-muted))] mb-2">No execution logs yet</p>
+                      <p className="text-xs text-[hsl(var(--pc-text-muted))]">Execute the node to see request/response details</p>
                     </div>
                   </div>
                 )}
@@ -1757,7 +1770,7 @@ return {
             ) : (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-2">
+                  <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                     Node ID
                   </label>
                   <input
@@ -1768,7 +1781,7 @@ return {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-2">
+                  <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                     Node Type
                   </label>
                   <input
@@ -1780,16 +1793,16 @@ return {
                 </div>
 
                 {/* Execution Settings */}
-                <div className="border-t border-gray-700/50 pt-4 space-y-4">
-                  <p className="text-xs font-medium text-gray-400 mb-3">Execution Settings</p>
+                <div className="border-t border-gray-200 pt-4 space-y-4">
+                  <p className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-3">Execution Settings</p>
                   
                   {/* Always Output Data */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">
+                      <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-1">
                         Always Output Data
                       </label>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-[hsl(var(--pc-text-muted))]">
                         Always produce output even if empty
                       </p>
                     </div>
@@ -1800,17 +1813,17 @@ return {
                         onChange={(e) => handleConfigChange('always_output_data', e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                      <div className="w-11 h-6 bg-[hsl(var(--pc-muted))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                     </label>
                   </div>
 
                   {/* Execute Once */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">
+                      <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-1">
                         Execute Once
                       </label>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-[hsl(var(--pc-text-muted))]">
                         Execute this node only once per workflow run
                       </p>
                     </div>
@@ -1821,17 +1834,17 @@ return {
                         onChange={(e) => handleConfigChange('execute_once', e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                      <div className="w-11 h-6 bg-[hsl(var(--pc-muted))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                     </label>
                   </div>
 
                   {/* Retry On Fail */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">
+                      <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-1">
                         Retry On Fail
                       </label>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-[hsl(var(--pc-text-muted))]">
                         Automatically retry if execution fails
                       </p>
                     </div>
@@ -1842,13 +1855,13 @@ return {
                         onChange={(e) => handleConfigChange('retry_on_fail', e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                      <div className="w-11 h-6 bg-[hsl(var(--pc-muted))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                     </label>
                   </div>
 
                   {/* On Error */}
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-2">
+                    <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                       On Error
                     </label>
                     <select
@@ -1861,19 +1874,19 @@ return {
                       <option value="retry">Retry</option>
                       <option value="skip_node">Skip Node</option>
                     </select>
-                    <p className="text-xs text-gray-500 mt-1.5">
+                    <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                       Action to take when this node encounters an error
                     </p>
                   </div>
                 </div>
 
                 {/* Notes Section */}
-                <div className="border-t border-gray-700/50 pt-4 space-y-4">
-                  <p className="text-xs font-medium text-gray-400 mb-3">Notes</p>
+                <div className="border-t border-gray-200 pt-4 space-y-4">
+                  <p className="text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-3">Notes</p>
                   
                   {/* Notes Text Area */}
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-2">
+                    <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-2">
                       Notes
                     </label>
                     <textarea
@@ -1883,7 +1896,7 @@ return {
                       rows={4}
                       placeholder="Add notes about this node..."
                     />
-                    <p className="text-xs text-gray-500 mt-1.5">
+                    <p className="text-xs text-[hsl(var(--pc-text-muted))] mt-1.5">
                       Add notes or documentation for this node
                     </p>
                   </div>
@@ -1891,10 +1904,10 @@ return {
                   {/* Display Note in Flow */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">
+                      <label className="block text-xs font-medium text-[hsl(var(--pc-text-muted))] mb-1">
                         Display Note in Flow?
                       </label>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-[hsl(var(--pc-text-muted))]">
                         Show notes on the node in the canvas
                       </p>
                     </div>
@@ -1905,13 +1918,13 @@ return {
                         onChange={(e) => handleConfigChange('display_note_in_flow', e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                      <div className="w-11 h-6 bg-[hsl(var(--pc-muted))] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                     </label>
                   </div>
                 </div>
 
                 {/* Delete Node */}
-                <div className="border-t border-gray-700/50 pt-4">
+                <div className="border-t border-gray-200 pt-4">
                   <button
                     onClick={onDelete}
                     className="w-full px-3 py-2 text-sm bg-red-600/20 text-red-400 border border-red-600/30 rounded-lg hover:bg-red-600/30 flex items-center justify-center gap-2 transition-colors"
@@ -1926,16 +1939,16 @@ return {
         </div>
 
         {/* Right: Execution Logs/Output */}
-        <div className="w-[30%] min-w-[250px] max-w-[400px] bg-[#1a1a2e] flex flex-col flex-shrink-0">
-          <div className="px-4 py-3 border-b border-gray-700/50 bg-[#1e1e32] flex items-center justify-between">
+        <div className="w-[30%] min-w-[250px] max-w-[400px] flex flex-col flex-shrink-0" style={themeStyles.sidebar}>
+          <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between" style={themeStyles.toolbar}>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-gray-200">OUTPUT</h3>
+              <h3 className="text-sm font-semibold text-[hsl(var(--pc-text-primary))]">OUTPUT</h3>
               {nodeLog && (nodeLog.status === 'success' || nodeLog.status === 'completed') && (
                 <>
                   <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
                     <CheckCircle2 className="w-3 h-3 text-white" />
                   </div>
-                  <Info className="w-4 h-4 text-gray-400" />
+                  <Info className="w-4 h-4 text-[hsl(var(--pc-text-muted))]" />
                 </>
               )}
               {nodeLog && nodeLog.status === 'error' && (
@@ -1946,13 +1959,13 @@ return {
           
           {/* Output Tabs */}
           {(nodeLog || (node?.type === 'input_node' && (node.config?.filename || node.result_metadata?.file_info || node.result_metadata?.data))) && (
-            <div className="flex border-b border-gray-700/50 bg-[#1e1e32]">
+            <div className="flex border-b border-gray-200" style={themeStyles.toolbar}>
               <button
                 onClick={() => setOutputViewTab('table')}
                 className={`px-4 py-2 text-xs font-medium transition-colors ${
                   outputViewTab === 'table'
-                    ? 'text-gray-200 border-b-2 border-gray-200'
-                    : 'text-gray-500 hover:text-gray-300'
+                    ? 'text-[hsl(var(--pc-text-primary))] border-b-2 border-[hsl(var(--pc-primary))]'
+                    : 'text-[hsl(var(--pc-text-muted))] hover:text-[hsl(var(--pc-text-secondary))]'
                 }`}
               >
                 Table
@@ -1961,8 +1974,8 @@ return {
                 onClick={() => setOutputViewTab('json')}
                 className={`px-4 py-2 text-xs font-medium transition-colors ${
                   outputViewTab === 'json'
-                    ? 'text-gray-200 border-b-2 border-gray-200'
-                    : 'text-gray-500 hover:text-gray-300'
+                    ? 'text-[hsl(var(--pc-text-primary))] border-b-2 border-[hsl(var(--pc-primary))]'
+                    : 'text-[hsl(var(--pc-text-muted))] hover:text-[hsl(var(--pc-text-secondary))]'
                 }`}
               >
                 JSON
@@ -1971,8 +1984,8 @@ return {
                 onClick={() => setOutputViewTab('schema')}
                 className={`px-4 py-2 text-xs font-medium transition-colors ${
                   outputViewTab === 'schema'
-                    ? 'text-gray-200 border-b-2 border-gray-200'
-                    : 'text-gray-500 hover:text-gray-300'
+                    ? 'text-[hsl(var(--pc-text-primary))] border-b-2 border-[hsl(var(--pc-primary))]'
+                    : 'text-[hsl(var(--pc-text-muted))] hover:text-[hsl(var(--pc-text-secondary))]'
                 }`}
               >
                 Schema
@@ -1983,11 +1996,11 @@ return {
           <div className="flex-1 overflow-y-auto p-4">
             {/* Info box for RFdiffusion */}
             {node.type === 'rfdiffusion_node' && !nodeLog && (
-              <div className="mb-4 bg-gray-800/50 border border-gray-700/50 rounded-lg p-3 flex items-start gap-2">
+              <div className="mb-4 bg-[hsl(var(--pc-muted)/0.5)] border border-gray-200 rounded-lg p-3 flex items-start gap-2">
                 <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                   <span className="text-blue-400 text-xs font-bold">i</span>
                 </div>
-                <p className="text-xs text-gray-400 leading-relaxed">
+                <p className="text-xs text-[hsl(var(--pc-text-muted))] leading-relaxed">
                   Use the suggested contigs from the input node for optimal results. The contigs parameter specifies which regions of the structure to design.
                 </p>
               </div>
@@ -2166,7 +2179,7 @@ return {
                     <>
                       {/* Item count */}
                       {itemCount > 0 && (
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-[hsl(var(--pc-text-muted))]">
                           {itemCount} {itemCount === 1 ? 'item' : 'items'}
                         </div>
                       )}
@@ -2181,16 +2194,16 @@ return {
                                 const text = JSON.stringify(outputData, null, 2);
                                 navigator.clipboard.writeText(text);
                               }}
-                              className="p-1.5 hover:bg-gray-700/50 rounded transition-colors"
+                              className="p-1.5 hover:bg-[hsl(var(--pc-muted)/0.5)] rounded transition-colors"
                               title="Copy output"
                             >
-                              <Copy className="w-4 h-4 text-gray-400" />
+                              <Copy className="w-4 h-4 text-[hsl(var(--pc-text-muted))]" />
                             </button>
                             <button
-                              className="p-1.5 hover:bg-gray-700/50 rounded transition-colors"
+                              className="p-1.5 hover:bg-[hsl(var(--pc-muted)/0.5)] rounded transition-colors"
                               title="Search"
                             >
-                              <Search className="w-4 h-4 text-gray-400" />
+                              <Search className="w-4 h-4 text-[hsl(var(--pc-text-muted))]" />
                             </button>
                           </div>
                         )}
@@ -2200,13 +2213,13 @@ return {
                           <div className={`rounded-lg p-4 text-xs font-mono overflow-x-auto border min-h-[200px] ${
                             outputData?.error 
                               ? 'bg-red-900/20 border-red-700/50 text-red-300' 
-                              : 'bg-gray-900/50 border-gray-700/30 text-gray-300'
+                              : 'bg-[hsl(var(--pc-background)/0.5)] border-gray-200 text-[hsl(var(--pc-text-secondary))]'
                           }`}>
                             <pre className="whitespace-pre-wrap">
                               {outputData !== null && outputData !== undefined ? (
                                 JSON.stringify(outputData, null, 2)
                               ) : (
-                                <span className="text-gray-500 italic">
+                                <span className="text-[hsl(var(--pc-text-muted))] italic">
                                   No output data available
                                   {node?.type === 'input_node' && (
                                     <div className="mt-2 text-xs space-y-1">
@@ -2233,26 +2246,26 @@ return {
 
                         {/* Table View */}
                         {outputViewTab === 'table' && (
-                          <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700/30 min-h-[200px]">
+                          <div className="bg-[hsl(var(--pc-background)/0.5)] rounded-lg p-4 border border-gray-200 min-h-[200px]">
                             {/* Special formatted view for input node file metadata */}
                             {node?.type === 'input_node' && outputData && typeof outputData === 'object' && outputData.type === 'pdb_file' ? (
                               <div className="space-y-4">
                                 {/* File Information Section */}
                                 <div className="space-y-3">
-                                  <h4 className="text-sm font-semibold text-gray-200 border-b border-gray-700 pb-2">File Information</h4>
+                                  <h4 className="text-sm font-semibold text-[hsl(var(--pc-text-primary))] border-b border-gray-200 pb-2">File Information</h4>
                                   <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                      <span className="text-xs text-gray-500">Filename:</span>
-                                      <div className="text-xs text-gray-300 mt-1 font-mono">{outputData.filename || 'N/A'}</div>
+                                      <span className="text-xs text-[hsl(var(--pc-text-muted))]">Filename:</span>
+                                      <div className="text-xs text-[hsl(var(--pc-text-secondary))] mt-1 font-mono">{outputData.filename || 'N/A'}</div>
                                     </div>
                                     <div>
-                                      <span className="text-xs text-gray-500">File ID:</span>
-                                      <div className="text-xs text-gray-300 mt-1 font-mono">{outputData.file_id || 'N/A'}</div>
+                                      <span className="text-xs text-[hsl(var(--pc-text-muted))]">File ID:</span>
+                                      <div className="text-xs text-[hsl(var(--pc-text-secondary))] mt-1 font-mono">{outputData.file_id || 'N/A'}</div>
                                     </div>
                                     {outputData.file_url && (
                                       <div className="col-span-2">
-                                        <span className="text-xs text-gray-500">File URL:</span>
-                                        <div className="text-xs text-gray-300 mt-1 font-mono break-all">{outputData.file_url}</div>
+                                        <span className="text-xs text-[hsl(var(--pc-text-muted))]">File URL:</span>
+                                        <div className="text-xs text-[hsl(var(--pc-text-secondary))] mt-1 font-mono break-all">{outputData.file_url}</div>
                                       </div>
                                     )}
                                   </div>
@@ -2260,25 +2273,25 @@ return {
 
                                 {/* Structure Information Section */}
                                 {(outputData.chains || outputData.total_residues || outputData.atoms) && (
-                                  <div className="space-y-3 pt-3 border-t border-gray-700">
-                                    <h4 className="text-sm font-semibold text-gray-200 border-b border-gray-700 pb-2">Structure Information</h4>
+                                  <div className="space-y-3 pt-3 border-t border-gray-200">
+                                    <h4 className="text-sm font-semibold text-[hsl(var(--pc-text-primary))] border-b border-gray-200 pb-2">Structure Information</h4>
                                     <div className="grid grid-cols-2 gap-3">
                                       {outputData.atoms && (
                                         <div>
-                                          <span className="text-xs text-gray-500">Atoms:</span>
-                                          <div className="text-xs text-gray-300 mt-1">{outputData.atoms.toLocaleString()}</div>
+                                          <span className="text-xs text-[hsl(var(--pc-text-muted))]">Atoms:</span>
+                                          <div className="text-xs text-[hsl(var(--pc-text-secondary))] mt-1">{outputData.atoms.toLocaleString()}</div>
                                         </div>
                                       )}
                                       {outputData.total_residues && (
                                         <div>
-                                          <span className="text-xs text-gray-500">Total Residues:</span>
-                                          <div className="text-xs text-gray-300 mt-1">{outputData.total_residues.toLocaleString()}</div>
+                                          <span className="text-xs text-[hsl(var(--pc-text-muted))]">Total Residues:</span>
+                                          <div className="text-xs text-[hsl(var(--pc-text-secondary))] mt-1">{outputData.total_residues.toLocaleString()}</div>
                                         </div>
                                       )}
                                       {outputData.chains && Array.isArray(outputData.chains) && (
                                         <div className="col-span-2">
-                                          <span className="text-xs text-gray-500">Chains:</span>
-                                          <div className="text-xs text-gray-300 mt-1">
+                                          <span className="text-xs text-[hsl(var(--pc-text-muted))]">Chains:</span>
+                                          <div className="text-xs text-[hsl(var(--pc-text-secondary))] mt-1">
                                             {outputData.chains.join(', ')} ({outputData.chains.length} chain{outputData.chains.length !== 1 ? 's' : ''})
                                           </div>
                                         </div>
@@ -2289,13 +2302,13 @@ return {
 
                                 {/* Chain Details Section */}
                                 {outputData.chain_residue_counts && typeof outputData.chain_residue_counts === 'object' && Object.keys(outputData.chain_residue_counts).length > 0 && (
-                                  <div className="space-y-3 pt-3 border-t border-gray-700">
-                                    <h4 className="text-sm font-semibold text-gray-200 border-b border-gray-700 pb-2">Chain Residue Counts</h4>
+                                  <div className="space-y-3 pt-3 border-t border-gray-200">
+                                    <h4 className="text-sm font-semibold text-[hsl(var(--pc-text-primary))] border-b border-gray-200 pb-2">Chain Residue Counts</h4>
                                     <div className="space-y-2">
                                       {Object.entries(outputData.chain_residue_counts).map(([chain, count]) => (
                                         <div key={chain} className="flex items-center justify-between text-xs">
-                                          <span className="text-gray-500">Chain {chain}:</span>
-                                          <span className="text-gray-300 font-medium">{count as number} residues</span>
+                                          <span className="text-[hsl(var(--pc-text-muted))]">Chain {chain}:</span>
+                                          <span className="text-[hsl(var(--pc-text-secondary))] font-medium">{count as number} residues</span>
                                         </div>
                                       ))}
                                     </div>
@@ -2304,12 +2317,12 @@ return {
 
                                 {/* RFdiffusion Suggestions */}
                                 {outputData.suggested_contigs && (
-                                  <div className="space-y-3 pt-3 border-t border-gray-700">
-                                    <h4 className="text-sm font-semibold text-gray-200 border-b border-gray-700 pb-2">RFdiffusion Suggestions</h4>
+                                  <div className="space-y-3 pt-3 border-t border-gray-200">
+                                    <h4 className="text-sm font-semibold text-[hsl(var(--pc-text-primary))] border-b border-gray-200 pb-2">RFdiffusion Suggestions</h4>
                                     <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
-                                      <div className="text-xs text-gray-500 mb-1">Suggested Contigs:</div>
+                                      <div className="text-xs text-[hsl(var(--pc-text-muted))] mb-1">Suggested Contigs:</div>
                                       <div className="text-xs text-blue-300 font-mono">{outputData.suggested_contigs}</div>
-                                      <div className="text-xs text-gray-500 mt-2 italic">
+                                      <div className="text-xs text-[hsl(var(--pc-text-muted))] mt-2 italic">
                                         Use this value in RFdiffusion nodes for optimal design results.
                                       </div>
                                     </div>
@@ -2320,8 +2333,8 @@ return {
                               <div className="space-y-2">
                                 {Object.entries(outputData).map(([key, value]) => (
                                   <div key={key} className="flex items-start gap-2 text-xs">
-                                    <span className="text-gray-500 font-medium min-w-[120px]">{key}:</span>
-                                    <span className="text-gray-300 flex-1">
+                                    <span className="text-[hsl(var(--pc-text-muted))] font-medium min-w-[120px]">{key}:</span>
+                                    <span className="text-[hsl(var(--pc-text-secondary))] flex-1">
                                       {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
                                     </span>
                                   </div>
@@ -2331,9 +2344,9 @@ return {
                               <div className="overflow-x-auto">
                                 <table className="w-full text-xs">
                                   <thead>
-                                    <tr className="border-b border-gray-700">
+                                    <tr className="border-b border-gray-200">
                                       {outputData.length > 0 && Object.keys(outputData[0]).map((key) => (
-                                        <th key={key} className="text-left py-2 px-2 text-gray-400 font-medium">
+                                        <th key={key} className="text-left py-2 px-2 text-[hsl(var(--pc-text-muted))] font-medium">
                                           {key}
                                         </th>
                                       ))}
@@ -2341,9 +2354,9 @@ return {
                                   </thead>
                                   <tbody>
                                     {outputData.map((row: any, idx: number) => (
-                                      <tr key={idx} className="border-b border-gray-800">
+                                      <tr key={idx} className="border-b border-gray-200">
                                         {Object.values(row).map((cell: any, cellIdx: number) => (
-                                          <td key={cellIdx} className="py-2 px-2 text-gray-300">
+                                          <td key={cellIdx} className="py-2 px-2 text-[hsl(var(--pc-text-secondary))]">
                                             {typeof cell === 'object' ? JSON.stringify(cell) : String(cell)}
                                           </td>
                                         ))}
@@ -2353,7 +2366,7 @@ return {
                                 </table>
                               </div>
                             ) : (
-                              <div className="text-xs text-gray-500 italic">
+                              <div className="text-xs text-[hsl(var(--pc-text-muted))] italic">
                                 Table view not available for this data type
                               </div>
                             )}
@@ -2362,9 +2375,9 @@ return {
 
                         {/* Schema View */}
                         {outputViewTab === 'schema' && (
-                          <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700/30 min-h-[200px]">
+                          <div className="bg-[hsl(var(--pc-background)/0.5)] rounded-lg p-4 border border-gray-200 min-h-[200px]">
                             {outputData && typeof outputData === 'object' ? (
-                              <div className="text-xs font-mono text-gray-300">
+                              <div className="text-xs font-mono text-[hsl(var(--pc-text-secondary))]">
                                 <pre className="whitespace-pre-wrap">
                                   {JSON.stringify(
                                     (() => {
@@ -2392,7 +2405,7 @@ return {
                                 </pre>
                               </div>
                             ) : (
-                              <div className="text-xs text-gray-500 italic">
+                              <div className="text-xs text-[hsl(var(--pc-text-muted))] italic">
                                 Schema view not available for this data type
                               </div>
                             )}
@@ -2406,10 +2419,10 @@ return {
             ) : (
               <div className="h-full flex items-center justify-center">
                 <div className="text-center space-y-3">
-                  <p className="text-sm text-gray-500 mb-1">
+                  <p className="text-sm text-[hsl(var(--pc-text-muted))] mb-1">
                     Execute this node to view data
                   </p>
-                  <div className="text-xs text-gray-600 mt-2 p-2 bg-gray-800/50 rounded">
+                  <div className="text-xs text-[hsl(var(--pc-text-muted))] mt-2 p-2 bg-[hsl(var(--pc-muted)/0.5)] rounded">
                     Debug: hasCurrentExecution={currentExecution ? 'yes' : 'no'}, 
                     logsCount={currentExecution?.logs?.length || 0}, 
                     hasNodeLog={nodeLog ? 'yes' : 'no'},
@@ -2426,7 +2439,7 @@ return {
                   {node?.type === 'message_input_node' && (
                     <div className="mt-4 px-3 py-2 bg-blue-900/20 border border-blue-700/30 rounded-lg text-left max-w-xs">
                       <p className="text-xs text-blue-300 font-medium mb-1">💡 Tip:</p>
-                      <p className="text-xs text-gray-400 leading-relaxed">
+                      <p className="text-xs text-[hsl(var(--pc-text-muted))] leading-relaxed">
                         <code className="text-blue-300">console.log()</code> outputs to the browser console (F12). 
                         To see output here, <code className="text-blue-300">return</code> a value from your code.
                       </p>

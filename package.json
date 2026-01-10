@@ -9,31 +9,31 @@
     "url": "https://github.com/santosrai/pipeline-canvas/issues"
   },
   "type": "module",
-  "main": "./dist/index.mjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
+  "main": "./index.ts",
+  "module": "./index.ts",
+  "types": "./index.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.mjs",
-      "types": "./dist/index.d.ts"
+      "import": "./index.ts",
+      "types": "./index.ts"
     },
     "./components": {
-      "import": "./dist/components/index.mjs",
-      "types": "./dist/components/index.d.ts"
+      "import": "./components/index.ts",
+      "types": "./components/index.ts"
     },
     "./types": {
-      "import": "./dist/types/index.mjs",
-      "types": "./dist/types/index.d.ts"
+      "import": "./types/index.ts",
+      "types": "./types/index.ts"
     },
     "./store": {
-      "import": "./dist/store/pipelineStore.mjs",
-      "types": "./dist/store/pipelineStore.d.ts"
+      "import": "./store/pipelineStore.ts",
+      "types": "./store/pipelineStore.ts"
     },
     "./utils": {
-      "import": "./dist/utils/index.mjs",
-      "types": "./dist/utils/index.d.ts"
+      "import": "./utils/index.ts",
+      "types": "./utils/index.ts"
     },
-    "./style.css": "./dist/style.css"
+    "./style.css": "./style.css"
   },
   "files": [
     "dist",

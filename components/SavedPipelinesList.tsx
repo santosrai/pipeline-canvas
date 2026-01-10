@@ -86,11 +86,11 @@ export const SavedPipelinesList: React.FC = () => {
   // Collapsed sidebar view
   if (isPipelinesSidebarCollapsed) {
     return (
-      <div className="w-12 bg-[#1e1e32] border-r border-gray-700/50 flex flex-col items-center py-2 space-y-2 flex-shrink-0">
+      <div className="w-12 pc-bg-sidebar border-r border-gray-200 flex flex-col items-center py-2 space-y-2 flex-shrink-0">
         {/* Toggle button */}
         <button
           onClick={togglePipelinesSidebar}
-          className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 rounded transition-colors"
+          className="w-8 h-8 flex items-center justify-center text-[hsl(var(--pc-text-secondary))] hover:text-[hsl(var(--pc-text-primary))] hover:bg-[hsl(var(--pc-muted)/0.5)] rounded transition-colors"
           title="Expand sidebar"
         >
           <Menu className="w-5 h-5" />
@@ -99,7 +99,7 @@ export const SavedPipelinesList: React.FC = () => {
         {/* New pipeline button */}
         <button
           onClick={handleNewPipeline}
-          className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 rounded transition-colors"
+          className="w-8 h-8 flex items-center justify-center text-[hsl(var(--pc-text-secondary))] hover:text-[hsl(var(--pc-text-primary))] hover:bg-[hsl(var(--pc-muted)/0.5)] rounded transition-colors"
           title="New Pipeline"
         >
           <Plus className="w-4 h-4" />
@@ -115,7 +115,7 @@ export const SavedPipelinesList: React.FC = () => {
         {/* Pipeline count indicator */}
         {savedPipelines.length > 0 && (
           <div className="mt-auto mb-2">
-            <div className="w-6 h-6 bg-gray-800 border border-gray-700 rounded text-xs text-gray-300 flex items-center justify-center">
+            <div className="w-6 h-6 bg-[hsl(var(--pc-muted))] border border-gray-200 rounded text-xs text-[hsl(var(--pc-text-secondary))] flex items-center justify-center">
               {savedPipelines.length > 99 ? '99+' : savedPipelines.length}
             </div>
           </div>
@@ -126,16 +126,16 @@ export const SavedPipelinesList: React.FC = () => {
 
   // Expanded sidebar view
   return (
-    <div className="w-64 bg-[#1e1e32] border-r border-gray-700/50 p-4 flex flex-col h-full flex-shrink-0 animate-in slide-in-from-left duration-300">
+    <div className="w-64 pc-bg-sidebar border-r border-gray-200 p-4 flex flex-col h-full flex-shrink-0 animate-in slide-in-from-left duration-300">
       {/* Header */}
       <div className="flex items-center justify-between mb-3 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <FolderOpen className="w-4 h-4 text-gray-300" />
-          <h3 className="text-sm font-semibold text-gray-200">Saved Pipelines</h3>
+          <FolderOpen className="w-4 h-4 text-[hsl(var(--pc-text-secondary))]" />
+          <h3 className="text-sm font-semibold text-[hsl(var(--pc-text-primary))]">Saved Pipelines</h3>
         </div>
         <button
           onClick={togglePipelinesSidebar}
-          className="p-1 text-gray-500 hover:text-gray-300 hover:bg-gray-800/50 rounded transition-colors"
+          className="p-1 text-[hsl(var(--pc-text-muted))] hover:text-[hsl(var(--pc-text-secondary))] hover:bg-[hsl(var(--pc-muted)/0.5)] rounded transition-colors"
           title="Collapse sidebar"
         >
           <X className="w-4 h-4" />
@@ -154,8 +154,8 @@ export const SavedPipelinesList: React.FC = () => {
       <div className="space-y-2 overflow-y-auto flex-1 min-h-0">
         {savedPipelines.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-xs text-gray-500 mb-1">No saved pipelines</p>
-            <p className="text-xs text-gray-600">
+            <p className="text-xs text-[hsl(var(--pc-text-muted))] mb-1">No saved pipelines</p>
+            <p className="text-xs text-[hsl(var(--pc-text-muted)/0.7)]">
               Save a pipeline to see it here
             </p>
           </div>
@@ -170,7 +170,7 @@ export const SavedPipelinesList: React.FC = () => {
                   border rounded-lg p-2 cursor-pointer transition-all
                   ${isActive 
                     ? 'border-blue-500/50 bg-blue-500/10' 
-                    : 'border-gray-700/50 hover:border-gray-600 hover:bg-gray-800/50'
+                    : 'border-gray-200 hover:border-gray-200 hover:bg-[hsl(var(--pc-muted)/0.5)]'
                   }
                 `}
               >
@@ -181,7 +181,7 @@ export const SavedPipelinesList: React.FC = () => {
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                       onClick={(e) => e.stopPropagation()}
-                      className="w-full px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-2 py-1 text-xs bg-[hsl(var(--pc-muted))] border border-gray-200 rounded text-[hsl(var(--pc-text-primary))] focus:outline-none focus:ring-2 focus:ring-blue-500"
                       autoFocus
                     />
                     <div className="flex items-center gap-1">
@@ -193,7 +193,7 @@ export const SavedPipelinesList: React.FC = () => {
                       </button>
                       <button
                         onClick={(e) => handleCancelEdit(e)}
-                        className="flex-1 px-2 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+                        className="flex-1 px-2 py-1 text-xs bg-[hsl(var(--pc-secondary))] text-[hsl(var(--pc-text-secondary))] rounded hover:bg-[hsl(var(--pc-muted))]"
                       >
                         Cancel
                       </button>
@@ -201,20 +201,20 @@ export const SavedPipelinesList: React.FC = () => {
                   </div>
                 ) : (
                   <div className="flex items-center justify-between gap-2">
-                    <h4 className="text-xs font-medium text-gray-200 flex-1 line-clamp-1 truncate">
+                    <h4 className="text-xs font-medium text-[hsl(var(--pc-text-primary))] flex-1 line-clamp-1 truncate">
                       {pipeline.name}
                     </h4>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <button
                         onClick={(e) => handleStartEdit(pipeline, e)}
-                        className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors"
+                        className="p-1 text-[hsl(var(--pc-text-muted))] hover:text-[hsl(var(--pc-text-secondary))] rounded transition-colors"
                         title="Rename"
                       >
                         <Edit2 className="w-3 h-3" />
                       </button>
                       <button
                         onClick={(e) => handleDelete(pipeline.id, e)}
-                        className="p-1 text-gray-500 hover:text-red-400 rounded transition-colors"
+                        className="p-1 text-[hsl(var(--pc-text-muted))] hover:text-red-400 rounded transition-colors"
                         title="Delete"
                       >
                         <Trash2 className="w-3 h-3" />

@@ -67,7 +67,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 bg-[#1e1e32] border border-gray-700 rounded-lg shadow-xl py-1 min-w-[180px]"
+      className="fixed z-50 pc-bg-panel border border-gray-200 rounded-lg shadow-xl py-1 min-w-[180px]"
       style={{
         left: `${x}px`,
         top: `${y}px`,
@@ -75,13 +75,13 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
       onContextMenu={handleContextMenu}
     >
       {/* Header */}
-      <div className="px-3 py-2 border-b border-gray-700/50 flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-300 truncate max-w-[140px]" title={nodeLabel}>
+      <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between">
+        <span className="text-xs font-medium text-[hsl(var(--pc-text-secondary))] truncate max-w-[140px]" title={nodeLabel}>
           {nodeLabel}
         </span>
         <button
           onClick={onClose}
-          className="p-0.5 text-gray-500 hover:text-gray-300 rounded transition-colors"
+          className="p-0.5 text-[hsl(var(--pc-text-muted))] hover:text-[hsl(var(--pc-text-secondary))] rounded transition-colors"
           title="Close"
         >
           <X className="w-3 h-3" />
@@ -92,7 +92,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
       <div className="py-1">
         <button
           onClick={() => handleAction(onRename)}
-          className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800/50 flex items-center gap-2 transition-colors"
+          className="w-full px-3 py-2 text-left text-sm text-[hsl(var(--pc-text-secondary))] hover:bg-[hsl(var(--pc-muted)/0.5)] flex items-center gap-2 transition-colors"
         >
           <Edit2 className="w-4 h-4" />
           <span>Rename</span>
@@ -100,7 +100,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
 
         <button
           onClick={() => handleAction(onConfigure)}
-          className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800/50 flex items-center gap-2 transition-colors"
+          className="w-full px-3 py-2 text-left text-sm text-[hsl(var(--pc-text-secondary))] hover:bg-[hsl(var(--pc-muted)/0.5)] flex items-center gap-2 transition-colors"
         >
           <Settings className="w-4 h-4" />
           <span>Configure</span>
@@ -108,13 +108,13 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
 
         <button
           onClick={() => handleAction(onDuplicate)}
-          className="w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-gray-800/50 flex items-center gap-2 transition-colors"
+          className="w-full px-3 py-2 text-left text-sm text-[hsl(var(--pc-text-secondary))] hover:bg-[hsl(var(--pc-muted)/0.5)] flex items-center gap-2 transition-colors"
         >
           <Copy className="w-4 h-4" />
           <span>Duplicate</span>
         </button>
 
-        <div className="my-1 border-t border-gray-700/50" />
+        <div className="my-1 border-t border-gray-200" />
 
         <button
           onClick={() => handleAction(onDelete)}

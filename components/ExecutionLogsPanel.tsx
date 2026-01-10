@@ -156,18 +156,18 @@ interface LogDetailsPanelProps {
 
 const LogDetailsPanel: React.FC<LogDetailsPanelProps> = ({ log }) => {
   return (
-    <div className="border-l border-gray-700/50 bg-[#1a1a2e] flex flex-col h-full">
+    <div className="border-l border-gray-200 pc-bg-canvas flex flex-col h-full">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-700/50 bg-[#1e1e32]">
+      <div className="px-4 py-3 border-b border-gray-200 pc-bg-panel">
         <div className="flex items-center gap-2">
           <div className={getNodeColor(log.nodeType)}>
             {getNodeIcon(log.nodeType)}
           </div>
-          <h3 className="text-sm font-semibold text-gray-200">{log.nodeLabel}</h3>
+          <h3 className="text-sm font-semibold text-[hsl(var(--pc-text-primary))]">{log.nodeLabel}</h3>
         </div>
         
         {/* Timing info */}
-        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+        <div className="flex items-center gap-4 mt-2 text-xs text-[hsl(var(--pc-text-muted))]">
           {log.duration !== undefined && (
             <div className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
@@ -189,12 +189,12 @@ const LogDetailsPanel: React.FC<LogDetailsPanelProps> = ({ log }) => {
       </div>
       
       {/* Input section */}
-      <div className="px-4 py-3 border-b border-gray-700/50">
+      <div className="px-4 py-3 border-b border-gray-200">
         <button className="flex items-center gap-2 w-full">
-          <ChevronDown className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-medium text-gray-300">Input</span>
+          <ChevronDown className="w-4 h-4 text-[hsl(var(--pc-text-muted))]" />
+          <span className="text-sm font-medium text-[hsl(var(--pc-text-secondary))]">Input</span>
         </button>
-        <div className="mt-3 bg-gray-900/50 rounded-lg p-3 text-xs font-mono text-gray-400 overflow-x-auto border border-gray-700/30">
+        <div className="mt-3 bg-[hsl(var(--pc-muted)/0.3)] rounded-lg p-3 text-xs font-mono text-[hsl(var(--pc-text-secondary))] overflow-x-auto border border-gray-200">
           <pre className="whitespace-pre-wrap">
             {JSON.stringify(log.input || { query: { message: "..." } }, null, 2)}
           </pre>
@@ -204,10 +204,10 @@ const LogDetailsPanel: React.FC<LogDetailsPanelProps> = ({ log }) => {
       {/* Output section */}
       <div className="px-4 py-3 flex-1 overflow-y-auto">
         <button className="flex items-center gap-2 w-full">
-          <ChevronDown className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-medium text-gray-300">Output</span>
+          <ChevronDown className="w-4 h-4 text-[hsl(var(--pc-text-muted))]" />
+          <span className="text-sm font-medium text-[hsl(var(--pc-text-secondary))]">Output</span>
         </button>
-        <div className="mt-3 bg-gray-900/50 rounded-lg p-3 text-xs font-mono text-gray-400 overflow-x-auto border border-gray-700/30">
+        <div className="mt-3 bg-[hsl(var(--pc-muted)/0.3)] rounded-lg p-3 text-xs font-mono text-[hsl(var(--pc-text-secondary))] overflow-x-auto border border-gray-200">
           <pre className="whitespace-pre-wrap">
             {log.error 
               ? <span className="text-red-400">{JSON.stringify({ error: log.error }, null, 2)}</span>
@@ -249,27 +249,27 @@ export const ExecutionLogsPanel: React.FC = () => {
   const totalDuration = displayLogs.reduce((acc, l) => acc + (l.duration || 0), 0);
 
   return (
-    <div className="h-full flex flex-col bg-[#1e1e32]">
+    <div className="h-full flex flex-col pc-bg-panel">
       {/* Header with execution summary */}
-      <div className="px-4 py-3 border-b border-gray-700/50 bg-gradient-to-r from-[#1a1a2e] to-[#1e1e32]">
+      <div className="px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-[hsl(var(--pc-canvas-bg))] to-[hsl(var(--pc-panel-bg))]">
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-sm font-semibold text-gray-200">
+            <span className="text-sm font-semibold text-[hsl(var(--pc-text-primary))]">
               {isExecuting ? 'Running...' : currentExecution ? 'Execution Complete' : 'Logs from Pipeline'}
             </span>
             {totalDuration > 0 && (
-              <span className="ml-2 text-xs text-gray-500">
+              <span className="ml-2 text-xs text-[hsl(var(--pc-text-muted))]">
                 | {formatDuration(totalDuration)}
               </span>
             )}
             {currentExecution?.startedAt && (
-              <span className="ml-2 text-xs text-gray-500">
+              <span className="ml-2 text-xs text-[hsl(var(--pc-text-muted))]">
                 | Started at {formatTime(currentExecution.startedAt)}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-[hsl(var(--pc-text-muted))]">
               {completedCount} / {displayLogs.length} nodes
             </span>
             {isExecuting && (
@@ -283,7 +283,7 @@ export const ExecutionLogsPanel: React.FC = () => {
         
         {/* Progress bar */}
         {displayLogs.length > 0 && (
-          <div className="mt-3 w-full bg-gray-700/50 rounded-full h-1.5 overflow-hidden">
+          <div className="mt-3 w-full bg-[hsl(var(--pc-muted)/0.5)] rounded-full h-1.5 overflow-hidden">
             <div 
               className={`h-1.5 rounded-full transition-all duration-500 ${
                 isExecuting ? 'bg-blue-500 animate-shimmer' : 'bg-green-500'
@@ -297,15 +297,15 @@ export const ExecutionLogsPanel: React.FC = () => {
       {/* Main content area */}
       <div className="flex-1 flex min-h-0">
         {/* Left: Execution tree */}
-        <div className="w-64 border-r border-gray-700/50 flex flex-col bg-[#1a1a2e]/50">
-          <div className="px-3 py-2.5 bg-gray-800/30 border-b border-gray-700/50">
-            <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+        <div className="w-64 border-r border-gray-200 flex flex-col bg-[hsl(var(--pc-canvas-bg)/0.5)]">
+          <div className="px-3 py-2.5 bg-[hsl(var(--pc-muted)/0.3)] border-b border-gray-200">
+            <span className="text-xs font-medium text-[hsl(var(--pc-text-muted))] uppercase tracking-wider">
               Latest Logs from {currentPipeline?.name || 'Pipeline'}
             </span>
           </div>
           <div className="flex-1 overflow-y-auto">
             {/* Pipeline root */}
-            <div className="px-3 py-2.5 flex items-center gap-2 bg-gray-800/20 border-b border-gray-700/30">
+            <div className="px-3 py-2.5 flex items-center gap-2 bg-[hsl(var(--pc-muted)/0.2)] border-b border-gray-200">
               <div className="w-5 h-5 rounded bg-green-500/20 flex items-center justify-center">
                 {isExecuting ? (
                   <Loader2 className="w-3 h-3 animate-spin text-green-400" />
@@ -313,7 +313,7 @@ export const ExecutionLogsPanel: React.FC = () => {
                   <CheckCircle2 className="w-3 h-3 text-green-400" />
                 )}
               </div>
-              <span className="text-sm font-medium text-gray-300">
+              <span className="text-sm font-medium text-[hsl(var(--pc-text-secondary))]">
                 {currentPipeline?.name || 'Pipeline'}
               </span>
             </div>
@@ -339,12 +339,12 @@ export const ExecutionLogsPanel: React.FC = () => {
           {selectedLog ? (
             <LogDetailsPanel log={selectedLog} />
           ) : (
-            <div className="h-full flex items-center justify-center bg-[#1a1a2e]">
+            <div className="h-full flex items-center justify-center pc-bg-canvas">
               <div className="text-center">
-                <div className="w-12 h-12 rounded-full bg-gray-800/50 flex items-center justify-center mx-auto mb-3">
-                  <FileInput className="w-5 h-5 text-gray-600" />
+                <div className="w-12 h-12 rounded-full bg-[hsl(var(--pc-muted)/0.5)] flex items-center justify-center mx-auto mb-3">
+                  <FileInput className="w-5 h-5 text-[hsl(var(--pc-text-muted))]" />
                 </div>
-                <p className="text-sm text-gray-500">Select a node to view execution details</p>
+                <p className="text-sm text-[hsl(var(--pc-text-muted))]">Select a node to view execution details</p>
               </div>
             </div>
           )}

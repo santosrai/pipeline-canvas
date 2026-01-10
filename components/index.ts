@@ -5,4 +5,6 @@ export { PipelineExecution } from './PipelineExecution';
 export { PipelineManager } from './PipelineManager';
 export { CustomHandle } from './CustomHandle';
 export { ExecutionLogsPanel } from './ExecutionLogsPanel';
+export { PipelineThemeWrapper, PipelineThemeToggle } from './PipelineThemeWrapper';
+export type { PipelineThemeWrapperProps } from './PipelineThemeWrapper';
 

@@ -1,4 +1,4 @@
-# @novoprotein/pipeline-canvas
+# @mesantosrai/pipeline-canvas
 
 A React component library for building visual pipeline/workflow canvases using React Flow.
 
@@ -60,8 +60,8 @@ npm install @radix-ui/react-dialog @radix-ui/react-dropdown-menu @radix-ui/react
 The library works completely standalone without any dependencies:
 
 ```tsx
-import { PipelineCanvas, PipelineCanvasProvider } from '@novoprotein/pipeline-canvas';
-import '@novoprotein/pipeline-canvas/style.css';
+import { PipelineCanvas, PipelineCanvasProvider } from '@mesantosrai/pipeline-canvas';
+import '@mesantosrai/pipeline-canvas/style.css';
 
 function App() {
   return (
@@ -90,8 +90,8 @@ import {
   PipelineCanvasProvider,
   type ApiClient,
   type AuthState 
-} from '@novoprotein/pipeline-canvas';
-import '@novoprotein/pipeline-canvas/style.css';
+} from '@mesantosrai/pipeline-canvas';
+import '@mesantosrai/pipeline-canvas/style.css';
 
 function App() {
   // Your API client (compatible with axios, fetch, or custom)
@@ -151,7 +151,7 @@ If you're using axios:
 
 ```tsx
 import axios from 'axios';
-import { PipelineCanvasProvider, type ApiClient } from '@novoprotein/pipeline-canvas';
+import { PipelineCanvasProvider, type ApiClient } from '@mesantosrai/pipeline-canvas';
 
 const apiClient: ApiClient = {
   get: (url: string, config?) => axios.get(url, config),
@@ -194,7 +194,7 @@ You can provide only the dependencies you need:
 ### Using the Store
 
 ```tsx
-import { usePipelineStore } from '@novoprotein/pipeline-canvas';
+import { usePipelineStore } from '@mesantosrai/pipeline-canvas';
 
 function MyComponent() {
   const { nodes, edges, addNode } = usePipelineStore();
@@ -215,7 +215,7 @@ function MyComponent() {
 You can also access dependencies directly from context:
 
 ```tsx
-import { usePipelineContext } from '@novoprotein/pipeline-canvas';
+import { usePipelineContext } from '@mesantosrai/pipeline-canvas';
 
 function MyComponent() {
   const { apiClient, authState, sessionId, getAuthHeaders } = usePipelineContext();
@@ -256,7 +256,7 @@ When dependencies are not provided:
 
 ```tsx
 import { useAuthStore } from './stores/authStore';
-import { PipelineCanvasProvider } from '@novoprotein/pipeline-canvas';
+import { PipelineCanvasProvider } from '@mesantosrai/pipeline-canvas';
 
 function App() {
   const user = useAuthStore(state => state.user);
@@ -281,7 +281,7 @@ function App() {
 ```tsx
 import { useContext } from 'react';
 import { AuthContext } from './AuthContext';
-import { PipelineCanvasProvider } from '@novoprotein/pipeline-canvas';
+import { PipelineCanvasProvider } from '@mesantosrai/pipeline-canvas';
 
 function App() {
   const { user, token } = useContext(AuthContext);
@@ -305,7 +305,7 @@ The library supports structured logging and error tracking through dependency in
 By default, the library uses a console logger that only logs in development mode:
 
 ```tsx
-import { PipelineCanvasProvider } from '@novoprotein/pipeline-canvas';
+import { PipelineCanvasProvider } from '@mesantosrai/pipeline-canvas';
 
 // No logger needed - uses default console logger (development only)
 <PipelineCanvasProvider>
@@ -321,7 +321,7 @@ Provide your own logger for structured logging:
 import { 
   PipelineCanvasProvider,
   type Logger 
-} from '@novoprotein/pipeline-canvas';
+} from '@mesantosrai/pipeline-canvas';
 
 const myLogger: Logger = {
   debug: (message, data) => {
@@ -356,7 +356,7 @@ import * as Sentry from '@sentry/react';
 import { 
   PipelineCanvasProvider,
   type ErrorReporter 
-} from '@novoprotein/pipeline-canvas';
+} from '@mesantosrai/pipeline-canvas';
 
 const errorReporter: ErrorReporter = {
   captureException: (error, context) => {
@@ -396,7 +396,7 @@ const errorReporter: ErrorReporter = {
 
 ```tsx
 import LogRocket from 'logrocket';
-import { PipelineCanvasProvider, type ErrorReporter } from '@novoprotein/pipeline-canvas';
+import { PipelineCanvasProvider, type ErrorReporter } from '@mesantosrai/pipeline-canvas';
 
 const errorReporter: ErrorReporter = {
   captureException: (error, context) => {
@@ -427,7 +427,7 @@ const errorReporter: ErrorReporter = {
 You can access the logger from context:
 
 ```tsx
-import { usePipelineContext } from '@novoprotein/pipeline-canvas';
+import { usePipelineContext } from '@mesantosrai/pipeline-canvas';
 
 function MyComponent() {
   const { logger } = usePipelineContext();
@@ -456,34 +456,152 @@ The library logs:
 - **No external calls**: Default logger only uses console (no network requests)
 - **Context-aware**: All logs include relevant context (pipeline ID, node ID, etc.)
 
-### Styling
+### Theming
 
-The library uses Tailwind CSS classes and shadcn/ui CSS variables. Make sure Tailwind is configured in your project:
+The library uses a **scoped theming system** with CSS variables prefixed with `--pc-` to avoid conflicts with your parent application's theme. This allows you to integrate the pipeline canvas into any app regardless of its existing styling.
+
+#### Basic Setup
+
+1. **Import the CSS file** in your main entry:
+
+```tsx
+// main.tsx or App.tsx
+import '@mesantosrai/pipeline-canvas/style.css';
+```
+
+2. **Configure Tailwind** to include the library's classes:
 
 ```js
 // tailwind.config.js
 module.exports = {
   content: [
     './src/**/*.{js,jsx,ts,tsx}',
-    './node_modules/@novoprotein/pipeline-canvas/**/*.{js,jsx,ts,tsx}',
+    './node_modules/@mesantosrai/pipeline-canvas/**/*.{js,jsx,ts,tsx}',
   ],
   theme: {
-    extend: {
-      // shadcn/ui theme variables are included in the library's style.css
-    },
+    extend: {},
   },
-  // ... rest of config
 };
 ```
 
-Also import the CSS file in your main entry:
+#### Using the Theme Wrapper
+
+The `PipelineThemeWrapper` component provides theme isolation and supports light/dark modes:
 
 ```tsx
-// main.tsx or App.tsx
-import '@novoprotein/pipeline-canvas/style.css';
+import { 
+  PipelineCanvas, 
+  PipelineThemeWrapper,
+  PipelineCanvasProvider 
+} from '@mesantosrai/pipeline-canvas';
+
+// Option 1: Follow system preference (default)
+<PipelineThemeWrapper>
+  <PipelineCanvasProvider {...deps}>
+    <PipelineCanvas />
+  </PipelineCanvasProvider>
+</PipelineThemeWrapper>
+
+// Option 2: Force a specific theme
+<PipelineThemeWrapper theme="dark">
+  <PipelineCanvasProvider {...deps}>
+    <PipelineCanvas />
+  </PipelineCanvasProvider>
+</PipelineThemeWrapper>
+
+// Option 3: Sync with your app's theme state
+const [appTheme, setAppTheme] = useState<'light' | 'dark'>('dark');
+
+<PipelineThemeWrapper externalTheme={appTheme}>
+  <PipelineCanvasProvider {...deps}>
+    <PipelineCanvas />
+  </PipelineCanvasProvider>
+</PipelineThemeWrapper>
 ```
 
-The library includes shadcn/ui CSS variables for theming. The components support both light and dark themes via CSS variables.
+#### Theme Toggle Button
+
+Include a theme toggle button using the `PipelineThemeToggle` component:
+
+```tsx
+import { PipelineThemeToggle, PipelineThemeWrapper } from '@mesantosrai/pipeline-canvas';
+
+<PipelineThemeWrapper>
+  <div className="flex justify-end p-2">
+    <PipelineThemeToggle />
+  </div>
+  <PipelineCanvasProvider {...deps}>
+    <PipelineCanvas />
+  </PipelineCanvasProvider>
+</PipelineThemeWrapper>
+```
+
+#### Using the Theme Hook
+
+Access the current theme programmatically:
+
+```tsx
+import { usePipelineTheme, useIsDarkTheme } from '@mesantosrai/pipeline-canvas';
+
+function MyComponent() {
+  const { theme, resolvedTheme, setTheme, toggleTheme } = usePipelineTheme();
+  const isDark = useIsDarkTheme();
+
+  return (
+    <div>
+      <p>Current theme: {resolvedTheme}</p>
+      <button onClick={toggleTheme}>Toggle Theme</button>
+    </div>
+  );
+}
+```
+
+#### Customizing Theme Colors
+
+Override the CSS variables in your own stylesheet to customize colors:
+
+```css
+/* Your app's CSS file */
+.pipeline-canvas-root {
+  /* Light theme overrides */
+  --pc-primary: 210 100% 50%;
+  --pc-canvas-bg: 0 0% 98%;
+}
+
+.pipeline-canvas-root[data-theme="dark"] {
+  /* Dark theme overrides */
+  --pc-primary: 210 100% 60%;
+  --pc-canvas-bg: 220 20% 10%;
+}
+```
+
+#### Available CSS Variables
+
+| Variable | Description |
+|----------|-------------|
+| `--pc-background` | Main background color |
+| `--pc-foreground` | Main text color |
+| `--pc-card` | Card/panel background |
+| `--pc-primary` | Primary accent color |
+| `--pc-secondary` | Secondary color |
+| `--pc-muted` | Muted/disabled color |
+| `--pc-border` | Border color |
+| `--pc-canvas-bg` | Canvas background |
+| `--pc-toolbar-bg` | Toolbar background |
+| `--pc-sidebar-bg` | Sidebar background |
+| `--pc-panel-bg` | Panel background |
+| `--pc-text-primary` | Primary text |
+| `--pc-text-secondary` | Secondary text |
+| `--pc-text-muted` | Muted text |
+
+#### Theme Props Reference
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `theme` | `'light' \| 'dark' \| 'system'` | `'system'` | Theme preference |
+| `externalTheme` | `'light' \| 'dark'` | - | External theme override from parent app |
+| `onThemeChange` | `(theme: 'light' \| 'dark') => void` | - | Callback when theme changes |
+| `className` | `string` | - | Additional CSS classes |
 
 ## Development
 
@@ -518,7 +636,12 @@ pipeline-canvas/
 │   ├── PipelineExecution.tsx
 │   ├── PipelineManager.tsx
 │   ├── CustomHandle.tsx
-│   └── ExecutionLogsPanel.tsx
+│   ├── ExecutionLogsPanel.tsx
+│   ├── PipelineThemeWrapper.tsx  # Theme isolation wrapper
+│   └── index.ts
+├── context/             # React contexts
+│   ├── PipelineContext.tsx
+│   └── ThemeContext.tsx          # Theme state management
 ├── nodes/               # Node type configurations (JSON)
 │   ├── input_node/
 │   ├── rfdiffusion_node/
@@ -533,7 +656,7 @@ pipeline-canvas/
 │   └── nodeLoader.ts
 ├── dist/                # Build output (generated)
 ├── index.ts             # Main export file
-├── style.css            # CSS styles
+├── style.css            # CSS styles (scoped --pc- variables)
 ├── package.json
 ├── tsconfig.json
 └── vite.config.ts

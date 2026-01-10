@@ -16,6 +16,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { usePipelineStore } from '../store/pipelineStore';
 import { usePipelineContext } from '../context/PipelineContext';
+import { usePipelineTheme } from '../context/ThemeContext';
 import { PipelineNode, NodeStatus } from '../types/index';
 import { PipelineNodeConfig } from './PipelineNodeConfig';
 import { PipelineNodePalette } from './PipelineNodePalette';
@@ -115,7 +116,7 @@ const EditableLabel: React.FC<{
         onChange={(e) => setEditValue(e.target.value)}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
-        className="w-full text-center text-xs font-medium text-white bg-gray-700/80 border border-gray-500 rounded px-2 py-1 outline-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        className="w-full text-center text-xs font-medium bg-[hsl(var(--pc-muted))] text-[hsl(var(--pc-foreground))] border border-gray-200 rounded px-2 py-1 outline-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         onClick={(e) => e.stopPropagation()}
         onDoubleClick={(e) => e.stopPropagation()}
       />
@@ -125,7 +126,7 @@ const EditableLabel: React.FC<{
   return (
     <div
       onDoubleClick={handleDoubleClick}
-      className="text-center text-xs font-medium text-gray-200 cursor-text hover:text-white transition-colors px-1 py-0.5 rounded hover:bg-gray-800/50"
+      className="text-center text-xs font-medium text-[hsl(var(--pc-text-secondary))] cursor-text hover:text-[hsl(var(--pc-text-primary))] transition-colors px-1 py-0.5 rounded hover:bg-[hsl(var(--pc-muted)/0.5)]"
       title="Double-click to edit"
     >
       {label || 'Unnamed'}
@@ -1241,15 +1242,25 @@ export const PipelineCanvas: React.FC = () => {
     return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Get theme for conditional styling
+  const themeContext = (() => {
+    try {
+      return usePipelineTheme();
+    } catch {
+      return { resolvedTheme: 'dark' as const };
+    }
+  })();
+  const isDark = themeContext.resolvedTheme === 'dark';
+
   return (
-    <div className="h-full flex flex-col bg-[#1a1a2e]">
+    <div className="h-full flex flex-col pc-bg-canvas">
       {/* Toolbar with Editor/Executions toggle */}
-      <div className="h-14 flex items-center justify-between px-4 border-b border-gray-700/50 bg-[#1e1e32]">
+      <div className="h-14 flex items-center justify-between px-4 border-b border-gray-200 pc-bg-toolbar">
         {/* Left side - View toggle */}
         <div className="flex items-center gap-4">
           {/* Auto-save indicator (like n8n) */}
           {currentPipeline && (
-            <div className="flex items-center gap-2 text-xs text-gray-400">
+            <div className="flex items-center gap-2 text-xs text-[hsl(var(--pc-text-secondary))]">
               {isSaving ? (
                 <>
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -1258,8 +1269,8 @@ export const PipelineCanvas: React.FC = () => {
               ) : lastSavedAt ? (
                 <>
                   <CheckCircle2 className="w-3 h-3 text-green-500" />
-                  <span className="text-gray-300">Saved</span>
-                  <span className="text-gray-500">•</span>
+                  <span className="text-[hsl(var(--pc-text-primary))]">Saved</span>
+                  <span className="text-[hsl(var(--pc-text-muted))]">•</span>
                   <span>{formatLastSaved(lastSavedAt)}</span>
                 </>
               ) : null}
@@ -1267,13 +1278,13 @@ export const PipelineCanvas: React.FC = () => {
           )}
           
           {/* n8n-style Editor/Executions toggle */}
-          <div className="flex bg-gray-800/50 rounded-lg p-0.5">
+          <div className="flex bg-[hsl(var(--pc-muted)/0.5)] rounded-lg p-0.5">
             <button
               onClick={() => setViewMode('editor')}
               className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${
                 viewMode === 'editor'
-                  ? 'bg-gray-700 text-white shadow-sm'
-                  : 'text-gray-400 hover:text-gray-200'
+                  ? 'bg-[hsl(var(--pc-secondary))] text-[hsl(var(--pc-foreground))] shadow-sm'
+                  : 'text-[hsl(var(--pc-text-secondary))] hover:text-[hsl(var(--pc-text-primary))]'
               }`}
             >
               Editor
@@ -1282,8 +1293,8 @@ export const PipelineCanvas: React.FC = () => {
               onClick={() => setViewMode('executions')}
               className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 ${
                 viewMode === 'executions'
-                  ? 'bg-gray-700 text-white shadow-sm'
-                  : 'text-gray-400 hover:text-gray-200'
+                  ? 'bg-[hsl(var(--pc-secondary))] text-[hsl(var(--pc-foreground))] shadow-sm'
+                  : 'text-[hsl(var(--pc-text-secondary))] hover:text-[hsl(var(--pc-text-primary))]'
               }`}
             >
               Executions
@@ -1308,7 +1319,7 @@ export const PipelineCanvas: React.FC = () => {
           {!hasGhostNodes && viewMode === 'editor' && (
             <button
               onClick={() => setShowPalette(!showPalette)}
-              className="px-3 py-1.5 text-xs bg-gray-700 text-gray-200 rounded-lg hover:bg-gray-600 flex items-center gap-1.5 transition-colors"
+              className="px-3 py-1.5 text-xs bg-[hsl(var(--pc-secondary))] text-[hsl(var(--pc-text-secondary))] rounded-lg hover:bg-[hsl(var(--pc-muted))] flex items-center gap-1.5 transition-colors"
               title="Toggle node palette"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -1355,7 +1366,7 @@ export const PipelineCanvas: React.FC = () => {
                   )}
                   <button
                     onClick={handleSavePipeline}
-                    className="px-3 py-1.5 text-xs bg-gray-700 text-gray-200 rounded-lg hover:bg-gray-600 flex items-center gap-1.5 transition-colors"
+                    className="px-3 py-1.5 text-xs bg-[hsl(var(--pc-secondary))] text-[hsl(var(--pc-text-secondary))] rounded-lg hover:bg-[hsl(var(--pc-muted))] flex items-center gap-1.5 transition-colors"
                   >
                     <Save className="w-3.5 h-3.5" />
                     Save
@@ -1365,7 +1376,7 @@ export const PipelineCanvas: React.FC = () => {
               {hasNodes && (
                 <button
                   onClick={clearPipeline}
-                  className="px-3 py-1.5 text-xs bg-gray-700 text-red-400 rounded-lg hover:bg-red-600/20 flex items-center gap-1.5 transition-colors"
+                  className="px-3 py-1.5 text-xs bg-[hsl(var(--pc-secondary))] text-red-400 rounded-lg hover:bg-red-600/20 flex items-center gap-1.5 transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   Clear
@@ -1387,13 +1398,13 @@ export const PipelineCanvas: React.FC = () => {
             {/* Center - Canvas */}
             <div className="flex-1 relative">
               {reactFlowNodes.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center bg-[#1a1a2e]">
+                <div className="h-full flex flex-col items-center justify-center pc-bg-canvas">
                   <div className="text-center">
-                    <div className="w-16 h-16 rounded-full bg-gray-800/50 flex items-center justify-center mx-auto mb-4">
-                      <Sparkles className="w-8 h-8 text-gray-500" />
+                    <div className="w-16 h-16 rounded-full bg-[hsl(var(--pc-muted)/0.5)] flex items-center justify-center mx-auto mb-4">
+                      <Sparkles className="w-8 h-8 text-[hsl(var(--pc-text-muted))]" />
                     </div>
-                    <p className="text-gray-400 mb-2">No pipeline nodes yet</p>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-[hsl(var(--pc-text-secondary))] mb-2">No pipeline nodes yet</p>
+                    <p className="text-sm text-[hsl(var(--pc-text-muted))]">
                       Ask the agent to create a pipeline, or click "Add Node" to build one manually
                     </p>
                   </div>
@@ -1410,17 +1421,16 @@ export const PipelineCanvas: React.FC = () => {
                   onNodeContextMenu={onNodeContextMenu}
                   nodeTypes={memoizedNodeTypes}
                   fitView
-                  className="bg-[#1a1a2e]"
+                  className="pc-bg-canvas"
                 >
                   <Background 
                     variant={BackgroundVariant.Dots} 
                     gap={20} 
                     size={1} 
-                    color="#374151"
+                    color={isDark ? 'hsl(217 19% 27%)' : 'hsl(215 14% 75%)'}
                   />
-                  <Controls className="bg-gray-800 border-gray-700 rounded-lg" />
+                  <Controls />
                   <MiniMap 
-                    className="bg-gray-800/50 rounded-lg"
                     nodeColor={(node: Node) => {
                       switch (node.data?.status) {
                         case 'running': return '#3b82f6';
@@ -1443,10 +1453,10 @@ export const PipelineCanvas: React.FC = () => {
           // Executions View - Split canvas and logs
           <div className="flex-1 flex min-h-0">
             {/* Left: Mini canvas view */}
-            <div className="w-1/2 border-r border-gray-700/50 relative">
+            <div className="w-1/2 border-r border-gray-200 relative">
               {reactFlowNodes.length === 0 ? (
-                <div className="h-full flex items-center justify-center bg-[#1a1a2e]">
-                  <p className="text-gray-500">No nodes to display</p>
+                <div className="h-full flex items-center justify-center pc-bg-canvas">
+                  <p className="text-[hsl(var(--pc-text-muted))]">No nodes to display</p>
                 </div>
               ) : (
                 <ReactFlow
@@ -1460,7 +1470,7 @@ export const PipelineCanvas: React.FC = () => {
                   onNodeContextMenu={onNodeContextMenu}
                   nodeTypes={memoizedNodeTypes}
                   fitView
-                  className="bg-[#1a1a2e]"
+                  className="pc-bg-canvas"
                   nodesDraggable={!isExecuting}
                   nodesConnectable={!isExecuting}
                   elementsSelectable={!isExecuting}
@@ -1469,30 +1479,30 @@ export const PipelineCanvas: React.FC = () => {
                     variant={BackgroundVariant.Dots} 
                     gap={20} 
                     size={1} 
-                    color="#374151"
+                    color={isDark ? 'hsl(217 19% 27%)' : 'hsl(215 14% 75%)'}
                   />
-                  <Controls className="bg-gray-800 border-gray-700 rounded-lg" />
+                  <Controls />
                 </ReactFlow>
               )}
               
               {/* Canvas overlay controls */}
               <div className="absolute bottom-4 left-4 flex items-center gap-2">
-                <button className="p-2 bg-gray-800/80 rounded-lg text-gray-400 hover:text-white transition-colors">
+                <button className="p-2 bg-[hsl(var(--pc-muted)/0.8)] rounded-lg text-[hsl(var(--pc-text-secondary))] hover:text-[hsl(var(--pc-text-primary))] transition-colors">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                   </svg>
                 </button>
-                <button className="p-2 bg-gray-800/80 rounded-lg text-gray-400 hover:text-white transition-colors">
+                <button className="p-2 bg-[hsl(var(--pc-muted)/0.8)] rounded-lg text-[hsl(var(--pc-text-secondary))] hover:text-[hsl(var(--pc-text-primary))] transition-colors">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
                   </svg>
                 </button>
-                <button className="p-2 bg-gray-800/80 rounded-lg text-gray-400 hover:text-white transition-colors">
+                <button className="p-2 bg-[hsl(var(--pc-muted)/0.8)] rounded-lg text-[hsl(var(--pc-text-secondary))] hover:text-[hsl(var(--pc-text-primary))] transition-colors">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
                   </svg>
                 </button>
-                <button className="p-2 bg-gray-800/80 rounded-lg text-gray-400 hover:text-white transition-colors">
+                <button className="p-2 bg-[hsl(var(--pc-muted)/0.8)] rounded-lg text-[hsl(var(--pc-text-secondary))] hover:text-[hsl(var(--pc-text-primary))] transition-colors">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
@@ -1503,7 +1513,7 @@ export const PipelineCanvas: React.FC = () => {
             </div>
             
             {/* Right: Execution logs panel */}
-            <div className="w-1/2 bg-[#1e1e32]">
+            <div className="w-1/2 pc-bg-panel">
               <ExecutionLogsPanel />
             </div>
           </div>
@@ -1520,7 +1530,7 @@ export const PipelineCanvas: React.FC = () => {
       {selectedNodeId && viewMode === 'editor' && (
         <div
           ref={panelRef}
-          className="absolute bg-[#1e1e32] border border-gray-700/50 rounded-xl shadow-2xl z-10 flex flex-col"
+          className="absolute pc-bg-panel border border-gray-200 rounded-xl shadow-2xl z-10 flex flex-col"
           style={{
             right: `${panelPosition.right}px`,
             top: `${panelPosition.top}px`,

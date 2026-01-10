@@ -81,24 +81,24 @@ export const PipelineNodePalette: React.FC = () => {
   };
 
   return (
-    <div className="w-64 bg-[#1e1e32] border-l border-gray-700/50 p-4 flex flex-col h-full">
-      <h3 className="text-sm font-semibold text-gray-200 mb-3 flex-shrink-0">Node Palette</h3>
+    <div className="w-64 pc-bg-sidebar border-l border-gray-200 p-4 flex flex-col h-full">
+      <h3 className="text-sm font-semibold text-[hsl(var(--pc-text-primary))] mb-3 flex-shrink-0">Node Palette</h3>
       <div className="space-y-2 overflow-y-auto flex-1 min-h-0">
         {nodeTypes.map((nodeType) => (
           <button
             key={nodeType.type}
             onClick={() => handleAddNode(nodeType.type)}
-            className="w-full p-3 text-left border border-gray-700/50 rounded-lg hover:border-gray-600 hover:bg-gray-800/50 transition-colors group"
+            className="w-full p-3 text-left border border-gray-200 rounded-lg hover:border-gray-200 hover:bg-[hsl(var(--pc-muted)/0.5)] transition-colors group"
           >
             <div className="flex items-center gap-2 mb-1">
               <div className={`${nodeType.color} text-white p-1.5 rounded-lg shadow-lg group-hover:scale-110 transition-transform`}>
                 {nodeType.icon}
               </div>
-              <span className="text-sm font-medium text-gray-200">
+              <span className="text-sm font-medium text-[hsl(var(--pc-text-primary))]">
                 {nodeType.label}
               </span>
             </div>
-            <p className="text-xs text-gray-500">{nodeType.description}</p>
+            <p className="text-xs text-[hsl(var(--pc-text-muted))]">{nodeType.description}</p>
           </button>
         ))}
       </div>

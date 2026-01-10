@@ -91,7 +91,7 @@ Or add to `package.json`:
 ```json
 {
   "dependencies": {
-    "@novoprotein/pipeline-canvas": "git+ssh://git@github.com:santosrai/pipeline-canvas.git"
+    "@mesantosrai/pipeline-canvas": "git+ssh://git@github.com:santosrai/pipeline-canvas.git"
   }
 }
 ```
@@ -103,7 +103,7 @@ Or add to `package.json`:
 - **Peer dependencies**: Users must install peer dependencies in their projects, including:
   - React, React DOM, React Flow, Zustand, Lucide React
   - **shadcn/ui dependencies**: Radix UI packages, class-variance-authority, clsx, tailwind-merge
-- **CSS import**: Users need to import `@novoprotein/pipeline-canvas/style.css` in their projects
+- **CSS import**: Users need to import `@mesantosrai/pipeline-canvas/style.css` in their projects
 - **shadcn/ui components**: The library includes shadcn component implementations, but consumers must install the Radix UI peer dependencies
 
 ## Testing the Build Locally

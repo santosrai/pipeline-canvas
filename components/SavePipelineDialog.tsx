@@ -110,9 +110,9 @@ export const SavePipelineDialog: React.FC<SavePipelineDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleCancel()}>
-      <DialogContent className="sm:max-w-md bg-[#1e1e32] border-gray-700/50">
+      <DialogContent className="sm:max-w-md pc-bg-panel border-gray-200">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-gray-200">
+          <DialogTitle className="flex items-center gap-2 text-[hsl(var(--pc-text-primary))]">
             <Save className="w-5 h-5" />
             {isEditing ? 'Update Pipeline' : 'Save Pipeline'}
           </DialogTitle>
@@ -125,10 +125,10 @@ export const SavePipelineDialog: React.FC<SavePipelineDialogProps> = ({
                 <CheckCircle2 className="w-8 h-8 text-green-400" />
               </div>
               <div className="text-center">
-                <h3 className="text-lg font-semibold text-gray-200 mb-1">
+                <h3 className="text-lg font-semibold text-[hsl(var(--pc-text-primary))] mb-1">
                   Pipeline {isEditing ? 'Updated' : 'Saved'}!
                 </h3>
-                <p className="text-sm text-gray-400">
+                <p className="text-sm text-[hsl(var(--pc-text-secondary))]">
                   {pipelineName} has been {isEditing ? 'updated' : 'saved'} successfully.
                 </p>
               </div>
@@ -136,7 +136,7 @@ export const SavePipelineDialog: React.FC<SavePipelineDialogProps> = ({
           ) : (
             <>
               <div className="space-y-2">
-                <Label htmlFor="pipeline-name" className="text-gray-300">
+                <Label htmlFor="pipeline-name" className="text-[hsl(var(--pc-text-secondary))]">
                   Pipeline Name
                 </Label>
                 <Input
@@ -149,7 +149,7 @@ export const SavePipelineDialog: React.FC<SavePipelineDialogProps> = ({
                   }}
                   onKeyDown={handleKeyDown}
                   placeholder="Enter pipeline name..."
-                  className="bg-gray-800 border-gray-600 text-gray-200 placeholder-gray-500"
+                  className="bg-[hsl(var(--pc-muted))] border-gray-200 text-[hsl(var(--pc-text-primary))] placeholder-[hsl(var(--pc-text-muted))]"
                   autoFocus
                   disabled={isSaving}
                 />
@@ -162,19 +162,19 @@ export const SavePipelineDialog: React.FC<SavePipelineDialogProps> = ({
               </div>
 
               {currentPipeline && (
-                <div className="p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
-                  <div className="text-xs text-gray-400 space-y-1">
+                <div className="p-3 bg-[hsl(var(--pc-muted)/0.5)] rounded-lg border border-gray-200">
+                  <div className="text-xs text-[hsl(var(--pc-text-secondary))] space-y-1">
                     <div className="flex items-center justify-between">
                       <span>Nodes:</span>
-                      <span className="text-gray-300">{currentPipeline.nodes.length}</span>
+                      <span className="text-[hsl(var(--pc-text-primary))]">{currentPipeline.nodes.length}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Edges:</span>
-                      <span className="text-gray-300">{currentPipeline.edges.length}</span>
+                      <span className="text-[hsl(var(--pc-text-primary))]">{currentPipeline.edges.length}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Status:</span>
-                      <span className="text-gray-300 capitalize">{currentPipeline.status}</span>
+                      <span className="text-[hsl(var(--pc-text-primary))] capitalize">{currentPipeline.status}</span>
                     </div>
                   </div>
                 </div>
@@ -189,7 +189,7 @@ export const SavePipelineDialog: React.FC<SavePipelineDialogProps> = ({
               variant="outline"
               onClick={handleCancel}
               disabled={isSaving}
-              className="bg-gray-700 text-gray-300 hover:bg-gray-600"
+              className="bg-[hsl(var(--pc-secondary))] text-[hsl(var(--pc-text-secondary))] hover:bg-[hsl(var(--pc-muted))]"
             >
               Cancel
             </Button>
