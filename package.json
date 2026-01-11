@@ -1,39 +1,23 @@
 {
   "name": "@mesantosrai/pipeline-canvas",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Pipeline canvas component library for visual workflow design",
   "author": "santosh rai <santosh984970@gmail.com>",
   "license": "MIT",
-"homepage": "https://github.com/santosrai/pipeline-canvas#readme",
+  "homepage": "https://github.com/santosrai/pipeline-canvas#readme",
   "bugs": {
     "url": "https://github.com/santosrai/pipeline-canvas/issues"
   },
   "type": "module",
-  "main": "./index.ts",
-  "module": "./index.ts",
-  "types": "./index.ts",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./index.ts",
-      "types": "./index.ts"
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.ts"
     },
-    "./components": {
-      "import": "./components/index.ts",
-      "types": "./components/index.ts"
-    },
-    "./types": {
-      "import": "./types/index.ts",
-      "types": "./types/index.ts"
-    },
-    "./store": {
-      "import": "./store/pipelineStore.ts",
-      "types": "./store/pipelineStore.ts"
-    },
-    "./utils": {
-      "import": "./utils/index.ts",
-      "types": "./utils/index.ts"
-    },
-    "./style.css": "./style.css"
+    "./style.css": "./dist/style.css"
   },
   "files": [
     "dist",
