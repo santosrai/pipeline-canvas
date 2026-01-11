@@ -4,7 +4,6 @@ import {
   usePipelineTheme, 
   PipelineTheme, 
   ResolvedTheme,
-  PipelineThemeProviderProps 
 } from '../context/ThemeContext';
 
 interface ThemeContainerProps {
