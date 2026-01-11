@@ -129,7 +129,7 @@ export const setPipelineDependencies = (deps: {
 const getDependencies = () => globalDependencies;
 
 // Debounce timer for auto-save (shared across store instances)
-let autoSaveTimer: NodeJS.Timeout | null = null;
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 const DRAFT_KEY = 'novoprotein-pipeline-draft';
 const UNNAMED_PIPELINE_NAME = 'Unnamed Pipeline';
 

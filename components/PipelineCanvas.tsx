@@ -1078,7 +1078,7 @@ export const PipelineCanvas: React.FC = () => {
   }, [reactFlowEdges, setEdges]);
 
   // Auto-save when node positions change (debounced to avoid excessive saves during dragging)
-  const positionUpdateTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const positionUpdateTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => {
     if (nodes.length > 0 && currentPipeline) {
       // Clear previous timer
