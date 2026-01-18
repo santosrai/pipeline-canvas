@@ -519,6 +519,58 @@ const [appTheme, setAppTheme] = useState<'light' | 'dark'>('dark');
 </PipelineThemeWrapper>
 ```
 
+#### Default White Theme (Standalone Usage)
+
+For a default light/white theme when using the pipeline canvas in any app:
+
+```tsx
+// Force light theme (default white)
+<PipelineThemeWrapper theme="light">
+  <PipelineCanvasProvider {...deps}>
+    <PipelineCanvas />
+  </PipelineCanvasProvider>
+</PipelineThemeWrapper>
+
+// Or rely on system preference (if system is light, it will be light)
+<PipelineThemeWrapper theme="system">
+  <PipelineCanvasProvider {...deps}>
+    <PipelineCanvas />
+  </PipelineCanvasProvider>
+</PipelineThemeWrapper>
+```
+
+**Note:** The pipeline canvas uses CSS variables at `:root` (light) and `html.dark` (dark) for portalled components (dialogs, dropdowns, etc.). For default white in any app, the `:root` values apply automatically. If your app sets `html.dark` for dark mode, portalled pipeline UI will follow that.
+
+#### Portalled Components and Dark Mode
+
+Pipeline UI components that render in portals (dialogs, dropdowns, select menus) are rendered outside `.pipeline-canvas-root` and rely on CSS variables at `:root` (light) and `html.dark` (dark).
+
+**For dark mode in portalled components:**
+
+- **Option 1:** Use `externalTheme` prop (recommended for apps with theme management):
+  ```tsx
+  const { theme } = useYourAppTheme(); // Your app's theme hook
+  
+  <PipelineThemeWrapper externalTheme={theme}>
+    <PipelineCanvas />
+  </PipelineThemeWrapper>
+  ```
+  When your app sets `html.dark` for dark mode, portalled pipeline UI will automatically use dark theme variables.
+
+- **Option 2:** Set `html.dark` class manually when in dark mode:
+  ```tsx
+  // In your app's theme provider
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDark]);
+  ```
+
+**For default white in any app:** The `:root` CSS variables provide light theme values by default. If the host app never sets `html.dark`, portalled pipeline UI will remain light (default white).
+
 #### Theme Toggle Button
 
 Include a theme toggle button using the `PipelineThemeToggle` component:

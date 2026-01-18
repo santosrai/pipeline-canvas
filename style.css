@@ -7,6 +7,164 @@
    All CSS variables use the `--pc-` prefix to avoid conflicts with parent apps.
    ============================================================================ */
 
+/* ============================================================================
+   Root-level variables for portalled content (dialogs, dropdowns, etc.)
+   
+   These variables are available at :root (light) and html.dark (dark) so that
+   portalled pipeline UI components (which render outside .pipeline-canvas-root)
+   can access theme variables.
+   
+   For default white theme in any app: :root values apply.
+   For dark mode in portalled components: host app should set html.dark class.
+   ============================================================================ */
+
+/* Light mode (default) - available at :root for portalled content */
+:root {
+  /* Core colors */
+  --pc-background: 240 5% 96%;
+  --pc-foreground: 222 47% 11%;
+  --pc-card: 0 0% 100%;
+  --pc-card-foreground: 222 47% 11%;
+  --pc-popover: 0 0% 100%;
+  --pc-popover-foreground: 222 47% 11%;
+  
+  /* Primary accent */
+  --pc-primary: 221 83% 53%;
+  --pc-primary-foreground: 210 40% 98%;
+  
+  /* Secondary */
+  --pc-secondary: 210 40% 96%;
+  --pc-secondary-foreground: 222 47% 11%;
+  
+  /* Muted */
+  --pc-muted: 210 40% 96%;
+  --pc-muted-foreground: 215 16% 47%;
+  
+  /* Accent */
+  --pc-accent: 210 40% 96%;
+  --pc-accent-foreground: 222 47% 11%;
+  
+  /* Destructive */
+  --pc-destructive: 0 84% 60%;
+  --pc-destructive-foreground: 210 40% 98%;
+  
+  /* Border & Input */
+  --pc-border: 229 231 235;         /* gray-200 */
+  --pc-border-strong: 209 213 219;  /* gray-300 */
+  --pc-input: 209 213 219;          /* gray-300 */
+  --pc-ring: 221 83% 53%;
+  
+  /* Radius */
+  --pc-radius: 0.5rem;
+  
+  /* Canvas-specific */
+  --pc-canvas-bg: 240 5% 96%;
+  --pc-canvas-dots: 215 14% 75%;
+  --pc-toolbar-bg: 0 0% 100%;
+  --pc-toolbar-border: 229 231 235; /* gray-200 */
+  --pc-sidebar-bg: 0 0% 100%;
+  --pc-panel-bg: 0 0% 100%;
+  
+  /* Node colors */
+  --pc-node-bg: 0 0% 100%;
+  --pc-node-border: 214 32% 91%;
+  --pc-node-border-pending: 220 9% 76%;
+  
+  /* Controls */
+  --pc-controls-bg: 0 0% 100%;
+  --pc-controls-border: 214 32% 91%;
+  --pc-minimap-bg: 0 0% 94%;
+  
+  /* Status colors (consistent across themes) */
+  --pc-status-running: 217 91% 60%;
+  --pc-status-success: 142 71% 45%;
+  --pc-status-error: 0 84% 60%;
+  --pc-status-pending: 220 9% 76%;
+  
+  /* Text colors */
+  --pc-text-primary: 222 47% 11%;
+  --pc-text-secondary: 215 16% 47%;
+  --pc-text-muted: 215 16% 57%;
+  --pc-text-inverse: 210 40% 98%;
+  
+  /* Button colors */
+  --pc-btn-primary-bg: 142 71% 45%;
+  --pc-btn-primary-hover: 142 71% 40%;
+  --pc-btn-secondary-bg: 217 19% 27%;
+  --pc-btn-secondary-hover: 217 19% 35%;
+  --pc-btn-danger-bg: 0 63% 31%;
+  --pc-btn-danger-hover: 0 63% 40%;
+}
+
+/* Dark mode - available at html.dark for portalled content */
+html.dark {
+  /* Core colors */
+  --pc-background: 230 25% 8%;
+  --pc-foreground: 213 31% 91%;
+  --pc-card: 224 50% 8%;
+  --pc-card-foreground: 213 31% 91%;
+  --pc-popover: 224 50% 8%;
+  --pc-popover-foreground: 213 31% 91%;
+  
+  /* Primary accent */
+  --pc-primary: 217 91% 60%;
+  --pc-primary-foreground: 222 47% 11%;
+  
+  /* Secondary */
+  --pc-secondary: 217 19% 17%;
+  --pc-secondary-foreground: 210 40% 98%;
+  
+  /* Muted */
+  --pc-muted: 217 19% 17%;
+  --pc-muted-foreground: 215 16% 57%;
+  
+  /* Accent */
+  --pc-accent: 217 19% 17%;
+  --pc-accent-foreground: 210 40% 98%;
+  
+  /* Destructive */
+  --pc-destructive: 0 63% 31%;
+  --pc-destructive-foreground: 210 40% 98%;
+  
+  /* Border & Input */
+  --pc-border: 55 65 81;            /* gray-700 */
+  --pc-border-strong: 75 85 99;     /* gray-600 */
+  --pc-input: 75 85 99;             /* gray-600 */
+  --pc-ring: 224 64% 33%;
+  
+  /* Canvas-specific */
+  --pc-canvas-bg: 233 25% 10%;
+  --pc-canvas-dots: 217 19% 27%;
+  --pc-toolbar-bg: 232 30% 12%;
+  --pc-toolbar-border: 55 65 81; /* gray-700 */
+  --pc-sidebar-bg: 232 30% 12%;
+  --pc-panel-bg: 232 30% 12%;
+  
+  /* Node colors */
+  --pc-node-bg: 0 0% 100%;
+  --pc-node-border: 220 9% 76%;
+  --pc-node-border-pending: 220 9% 76%;
+  
+  /* Controls */
+  --pc-controls-bg: 224 50% 10%;
+  --pc-controls-border: 217 19% 17%;
+  --pc-minimap-bg: 224 50% 6%;
+  
+  /* Text colors */
+  --pc-text-primary: 213 31% 91%;
+  --pc-text-secondary: 215 16% 65%;
+  --pc-text-muted: 215 16% 50%;
+  --pc-text-inverse: 222 47% 11%;
+  
+  /* Button colors */
+  --pc-btn-primary-bg: 142 71% 45%;
+  --pc-btn-primary-hover: 142 71% 50%;
+  --pc-btn-secondary-bg: 217 19% 27%;
+  --pc-btn-secondary-hover: 217 19% 35%;
+  --pc-btn-danger-bg: 0 63% 31%;
+  --pc-btn-danger-hover: 0 63% 40%;
+}
+
 /* Base theme variables - Light mode (default) */
 .pipeline-canvas-root {
   /* Core colors */
@@ -252,10 +410,20 @@
 .pc-bg-canvas { background-color: hsl(var(--pc-canvas-bg)); }
 .pc-bg-toolbar { background-color: hsl(var(--pc-toolbar-bg)); }
 .pc-bg-sidebar { background-color: hsl(var(--pc-sidebar-bg)); }
-.pc-bg-panel { background-color: hsl(var(--pc-panel-bg)); }
+.pc-bg-panel { 
+  /* Use CSS variable with fallback for portalled content */
+  background-color: hsl(var(--pc-panel-bg, 0 0% 100%));
+}
+html.dark .pc-bg-panel,
+.dark .pc-bg-panel {
+  /* Use CSS variable with fallback for portalled content */
+  background-color: hsl(var(--pc-panel-bg, 232 30% 12%));
+}
 .pc-bg-card { background-color: hsl(var(--pc-card)); }
 .pc-bg-muted { background-color: hsl(var(--pc-muted)); }
 .pc-bg-accent { background-color: hsl(var(--pc-accent)); }
+.pc-bg-background { background-color: hsl(var(--pc-background)); }
+.pc-bg-popover { background-color: hsl(var(--pc-popover)); }
 
 /* Solid background overrides for node config panel */
 .pc-bg-panel-solid {
@@ -285,15 +453,63 @@
   background-color: #252540;
 }
 
+/* Dialog background fix for portalled content - ensure opaque background */
+/* Set CSS variable at root for light theme */
+:root {
+  --dialog-bg-light: #ffffff;
+  --dialog-bg-dark: #1e1e2e;
+}
+
+/* Light theme (default) - must come first and be very specific */
+[data-radix-portal] > div[role="dialog"],
+div[role="dialog"][data-state],
+div[role="dialog"],
+[data-radix-dialog-content] {
+  background-color: var(--dialog-bg-light, #ffffff) !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+}
+
+/* Dark theme - override light theme with higher specificity */
+html.dark [data-radix-portal] > div[role="dialog"],
+html.dark div[role="dialog"][data-state],
+html.dark div[role="dialog"],
+html.dark [data-radix-dialog-content],
+.dark [data-radix-portal] > div[role="dialog"],
+.dark div[role="dialog"][data-state],
+.dark div[role="dialog"],
+.dark [data-radix-dialog-content] {
+  background-color: var(--dialog-bg-dark, #1e1e2e) !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+}
+
 /* Text utilities */
 .pc-text-primary { color: hsl(var(--pc-text-primary)); }
 .pc-text-secondary { color: hsl(var(--pc-text-secondary)); }
 .pc-text-muted { color: hsl(var(--pc-text-muted)); }
 .pc-text-inverse { color: hsl(var(--pc-text-inverse)); }
+.pc-text-foreground { color: hsl(var(--pc-foreground)); }
+.pc-text-accent { color: hsl(var(--pc-accent-foreground)); }
 
 /* Border utilities */
 .pc-border { border-color: rgb(var(--pc-border)); }
 .pc-border-toolbar { border-color: rgb(var(--pc-toolbar-border)); }
+.pc-border-input { border-color: rgb(var(--pc-input)); }
+
+/* Ring utilities */
+.pc-ring-offset-background { --tw-ring-offset-color: hsl(var(--pc-background)); }
+.pc-ring { --tw-ring-color: hsl(var(--pc-ring)); }
+
+/* Primary color utilities */
+.pc-bg-primary { background-color: hsl(var(--pc-primary)); }
+.pc-text-primary-color { color: hsl(var(--pc-primary)); }
+.pc-text-primary-foreground { color: hsl(var(--pc-primary-foreground)); }
+
+/* Destructive color utilities */
+.pc-bg-destructive { background-color: hsl(var(--pc-destructive)); }
+.pc-text-destructive { color: hsl(var(--pc-destructive)); }
+.pc-text-destructive-foreground { color: hsl(var(--pc-destructive-foreground)); }
 
 /* Status indicator colors */
 .pc-status-running { color: hsl(var(--pc-status-running)); }

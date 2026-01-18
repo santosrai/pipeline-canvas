@@ -110,7 +110,7 @@ export const SavePipelineDialog: React.FC<SavePipelineDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleCancel()}>
-      <DialogContent className="sm:max-w-md pc-bg-panel border-gray-200">
+      <DialogContent className="sm:max-w-md bg-white dark:bg-[#1e1e2e] border-gray-200">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[hsl(var(--pc-text-primary))]">
             <Save className="w-5 h-5" />

@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { Pipeline, PipelineNode, PipelineBlueprint, NodeStatus } from '../types/index';
 import { topologicalSort } from '../utils/topologicalSort';
 import { ApiClient, AuthState } from '../types/dependencies';
+import { useAuthStore } from '../../../stores/authStore';
 
 // Execution log entry for tracking node execution history
 export interface ExecutionLogEntry {
@@ -130,7 +131,11 @@ const getDependencies = () => globalDependencies;
 
 // Debounce timer for auto-save (shared across store instances)
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
-const DRAFT_KEY = 'novoprotein-pipeline-draft';
+const getDraftKey = () => {
+  const user = useAuthStore.getState().user;
+  const userId = user?.id || 'anonymous';
+  return `novoprotein-pipeline-draft-${userId}`;
+};
 const UNNAMED_PIPELINE_NAME = 'Unnamed Pipeline';
 
 const debouncedAutoSave = (get: () => PipelineState, set: (partial: Partial<PipelineState>) => void) => {
@@ -150,7 +155,7 @@ const debouncedAutoSave = (get: () => PipelineState, set: (partial: Partial<Pipe
         ...currentPipeline,
         updatedAt: new Date(),
       };
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      localStorage.setItem(getDraftKey(), JSON.stringify(draft));
       
       // Also save draft to backend if dependencies are available
       const deps = getDependencies();
@@ -534,7 +539,7 @@ export const usePipelineStore = create<PipelineState>()(
         
         // Also update draft
         try {
-          localStorage.setItem(DRAFT_KEY, JSON.stringify(pipelineToSave));
+          localStorage.setItem(getDraftKey(), JSON.stringify(pipelineToSave));
         } catch (error) {
           console.error('Failed to save draft:', error);
         }
@@ -680,6 +685,14 @@ export const usePipelineStore = create<PipelineState>()(
           // Filter out nulls
           const validPipelines = pipelines.filter((p): p is Pipeline => p !== null);
           
+          // REPLACE all pipelines (don't merge) - ensures user-specific data
+          // If backend returns empty array, initialize with empty pipelines
+          if (validPipelines.length === 0) {
+            console.log('[syncPipelines] No pipelines in backend, initializing with empty array');
+            set({ savedPipelines: [], currentPipeline: null });
+            return;
+          }
+          
           set({ savedPipelines: validPipelines });
           console.log(`[syncPipelines] Synced ${validPipelines.length} pipelines from backend`);
           
@@ -694,9 +707,9 @@ export const usePipelineStore = create<PipelineState>()(
               return currentTime > latestTime ? current : latest;
             });
             
-            // Only load if it's newer than localStorage draft
-            try {
-              const localDraft = localStorage.getItem(DRAFT_KEY);
+              // Only load if it's newer than localStorage draft
+              try {
+                const localDraft = localStorage.getItem(getDraftKey());
               if (localDraft) {
                 const parsedLocal = JSON.parse(localDraft);
                 const localTime = parsedLocal.updatedAt ? new Date(parsedLocal.updatedAt).getTime() : 0;
@@ -967,7 +980,7 @@ export const usePipelineStore = create<PipelineState>()(
         });
         // Clear draft
         try {
-          localStorage.removeItem(DRAFT_KEY);
+          localStorage.removeItem(getDraftKey());
         } catch (error) {
           console.error('Failed to clear draft:', error);
         }
@@ -1016,9 +1029,31 @@ export const usePipelineStore = create<PipelineState>()(
       },
     }),
     {
-      name: 'novoprotein-pipeline-storage',
+      name: 'novoprotein-pipeline-storage', // Base name, will be user-scoped
       version: 1,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => {
+        // Create user-scoped storage adapter
+        return {
+          getItem: (_key: string) => {
+            const user = useAuthStore.getState().user;
+            const userId = user?.id || 'anonymous';
+            const userKey = `novoprotein-pipeline-storage-${userId}`;
+            return localStorage.getItem(userKey);
+          },
+          setItem: (_key: string, value: string) => {
+            const user = useAuthStore.getState().user;
+            const userId = user?.id || 'anonymous';
+            const userKey = `novoprotein-pipeline-storage-${userId}`;
+            localStorage.setItem(userKey, value);
+          },
+          removeItem: (_key: string) => {
+            const user = useAuthStore.getState().user;
+            const userId = user?.id || 'anonymous';
+            const userKey = `novoprotein-pipeline-storage-${userId}`;
+            localStorage.removeItem(userKey);
+          },
+        };
+      }),
       partialize: (state) => ({
         // Persist all pipelines including unnamed ones
         savedPipelines: state.savedPipelines,
@@ -1028,6 +1063,16 @@ export const usePipelineStore = create<PipelineState>()(
       onRehydrateStorage: () => (state) => {
         if (state) {
           try {
+            // Check if user is authenticated - if not, return empty state
+            const user = useAuthStore.getState().user;
+            if (!user) {
+              console.log('[PipelineStore] No user authenticated, clearing pipeline data');
+              state.clearPipeline();
+              // Use store's setState method
+              usePipelineStore.setState({ savedPipelines: [] });
+              return;
+            }
+            
             // Convert date strings to Date objects for all pipelines
             state.savedPipelines = state.savedPipelines.map((pipeline) => {
               if (pipeline.createdAt && typeof pipeline.createdAt === 'string') {
@@ -1039,7 +1084,7 @@ export const usePipelineStore = create<PipelineState>()(
               return pipeline;
             });
             
-            const draft = localStorage.getItem(DRAFT_KEY);
+            const draft = localStorage.getItem(getDraftKey());
             if (draft) {
               const parsed = JSON.parse(draft);
               // Restore draft (including unnamed pipelines)
@@ -1064,7 +1109,14 @@ export const usePipelineStore = create<PipelineState>()(
             const user = deps.authState?.user;
             const apiClient = deps.apiClient;
             if (user && apiClient && state.syncPipelines) {
+              // Clear local pipelines first, then sync from backend to ensure user-specific data
+              console.log('[PipelineStore] Clearing pipelines and syncing from backend...');
+              usePipelineStore.setState({ savedPipelines: [] });
               state.syncPipelines({ apiClient, authState: deps.authState }).catch(console.error);
+            } else if (!user) {
+              // If no user, clear all pipeline data
+              state.clearPipeline();
+              usePipelineStore.setState({ savedPipelines: [] });
             }
           }, 1000); // Delay to ensure auth is loaded
         }

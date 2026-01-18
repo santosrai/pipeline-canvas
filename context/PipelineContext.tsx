@@ -74,6 +74,26 @@ export const PipelineProvider: React.FC<PipelineProviderProps> = ({
       authState,
       sessionId,
     });
+    
+    // Sync pipelines from backend when dependencies are available and user is authenticated
+    // This ensures pipelines are loaded after login when PipelineProvider mounts
+    if (apiClient && authState?.user) {
+      // Use a small delay to ensure store is ready
+      const syncTimer = setTimeout(async () => {
+        try {
+          const { usePipelineStore } = await import('../store/pipelineStore');
+          const pipelineStore = usePipelineStore.getState();
+          if (pipelineStore.syncPipelines) {
+            console.log('[PipelineProvider] Syncing pipelines after dependencies set');
+            await pipelineStore.syncPipelines({ apiClient, authState });
+          }
+        } catch (error) {
+          console.error('[PipelineProvider] Failed to sync pipelines:', error);
+        }
+      }, 100);
+      
+      return () => clearTimeout(syncTimer);
+    }
   }, [apiClient, authState, sessionId]);
 
   return (
