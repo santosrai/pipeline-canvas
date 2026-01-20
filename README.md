@@ -714,6 +714,15 @@ pipeline-canvas/
 └── vite.config.ts
 ```
 
+## Backend Abstraction
+
+The library supports backend abstraction through adapters, allowing you to integrate with any backend framework. See [BACKEND_ABSTRACTION.md](./BACKEND_ABSTRACTION.md) for:
+
+- Adapter pattern implementation
+- Custom adapter examples (FastAPI, Express, Firebase, Supabase)
+- Configuration-based customization
+- Migration guide
+
 ## License
 
 MIT

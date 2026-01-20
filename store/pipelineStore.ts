@@ -3,6 +3,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { Pipeline, PipelineNode, PipelineBlueprint, NodeStatus } from '../types/index';
 import { topologicalSort } from '../utils/topologicalSort';
 import { ApiClient, AuthState } from '../types/dependencies';
+import { PipelinePersistenceAdapter, NodeExecutionAdapter, NovoProteinAdapter } from '../types/adapters';
+import { PipelineConfig } from '../types/config';
 import { useAuthStore } from '../../../stores/authStore';
 
 // Execution log entry for tracking node execution history
@@ -112,6 +114,16 @@ let globalDependencies: {
   sessionId?: string;
 } = {};
 
+// Module-level adapter store
+let globalAdapters: {
+  persistence?: PipelinePersistenceAdapter;
+  execution?: NodeExecutionAdapter;
+} = {};
+
+// Module-level configuration store
+// @ts-expect-error - globalConfig is set via setPipelineConfig and may be used in the future
+let globalConfig: PipelineConfig | null = null;
+
 /**
  * Set dependencies for the pipeline store
  * Called by PipelineProvider when context is available
@@ -125,9 +137,60 @@ export const setPipelineDependencies = (deps: {
 };
 
 /**
+ * Set adapters for the pipeline store
+ * Called by PipelineProvider when adapters are provided
+ */
+export const setPipelineAdapters = (adapters: {
+  persistence?: PipelinePersistenceAdapter;
+  execution?: NodeExecutionAdapter;
+}) => {
+  globalAdapters = adapters;
+};
+
+/**
+ * Set configuration for the pipeline store
+ * Called by PipelineProvider when config is provided
+ */
+export const setPipelineConfig = (config: PipelineConfig) => {
+  globalConfig = config;
+  // Note: getConfig() is currently commented out but may be used in the future
+};
+
+/**
  * Get current dependencies
  */
 const getDependencies = () => globalDependencies;
+
+/**
+ * Get persistence adapter (with fallback to default)
+ */
+const getPersistenceAdapter = (): PipelinePersistenceAdapter | null => {
+  if (globalAdapters.persistence) {
+    return globalAdapters.persistence;
+  }
+  
+  // Fallback: create default adapter if apiClient is available
+  const deps = getDependencies();
+  if (deps.apiClient) {
+    return new NovoProteinAdapter(deps.apiClient);
+  }
+  
+  return null;
+};
+
+/**
+ * Get execution adapter
+ */
+// const getExecutionAdapter = (): NodeExecutionAdapter | null => {
+//   return globalAdapters.execution || null;
+// };
+
+/**
+ * Get merged configuration
+ */
+// const getConfig = (): Required<PipelineConfig> => {
+//   return mergeConfig(globalConfig ?? undefined);
+// };
 
 // Debounce timer for auto-save (shared across store instances)
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -493,25 +556,17 @@ export const usePipelineStore = create<PipelineState>()(
         // Get dependencies from parameter or global store
         const effectiveDeps = deps || getDependencies();
         const user = effectiveDeps.authState?.user;
-        const apiClient = effectiveDeps.apiClient;
         const sessionId = effectiveDeps.sessionId;
         
-        // Check if user is authenticated and save to backend
-        if (user && apiClient) {
+        // Try to use adapter for backend save
+        const adapter = getPersistenceAdapter();
+        if (user && adapter) {
           try {
-            // Include message_id and conversation_id if provided (for message-scoped pipelines)
-            const pipelineData: any = { ...pipelineToSave };
-            if (messageId) {
-              pipelineData.message_id = messageId;
-            }
-            if (conversationId) {
-              pipelineData.conversation_id = conversationId;
-            } else if (!conversationId && messageId && sessionId) {
-              // Use provided sessionId if available
-              pipelineData.conversation_id = sessionId;
-            }
-            
-            await apiClient.post('/pipelines', pipelineData);
+            await adapter.save(pipelineToSave, {
+              messageId,
+              conversationId,
+              sessionId,
+            });
             console.log('Pipeline saved to backend', messageId ? `(linked to message ${messageId})` : '');
           } catch (error: any) {
             console.error('Failed to save pipeline to backend:', error);
@@ -551,21 +606,12 @@ export const usePipelineStore = create<PipelineState>()(
         // Get dependencies from parameter or global store
         const effectiveDeps = deps || getDependencies();
         const user = effectiveDeps.authState?.user;
-        const apiClient = effectiveDeps.apiClient;
         
-        // Check if user is authenticated and try to load from backend
-        if (user && apiClient) {
+        // Try to use adapter for backend load
+        const adapter = getPersistenceAdapter();
+        if (user && adapter) {
           try {
-            const response = await apiClient.get(`/pipelines/${pipelineId}`);
-            const backendPipeline = response.data.pipeline;
-            
-            // Convert dates
-            if (backendPipeline.createdAt) {
-              backendPipeline.createdAt = new Date(backendPipeline.createdAt);
-            }
-            if (backendPipeline.updatedAt) {
-              backendPipeline.updatedAt = new Date(backendPipeline.updatedAt);
-            }
+            const backendPipeline = await adapter.load(pipelineId);
             
             // Update local storage
             const existingIndex = savedPipelines.findIndex((p) => p.id === pipelineId);
@@ -607,24 +653,16 @@ export const usePipelineStore = create<PipelineState>()(
         // Get dependencies from parameter or global store
         const effectiveDeps = deps || getDependencies();
         const user = effectiveDeps.authState?.user;
-        const apiClient = effectiveDeps.apiClient;
         
-        // Check if user is authenticated and delete from backend
-        if (user && apiClient && apiClient.delete) {
+        // Try to use adapter for backend delete
+        const adapter = getPersistenceAdapter();
+        if (user && adapter) {
           try {
-            await apiClient.delete(`/pipelines/${pipelineId}`);
+            await adapter.delete(pipelineId);
             console.log('Pipeline deleted from backend');
           } catch (error: any) {
             console.warn('Failed to delete pipeline from backend:', error);
             // Continue with local delete even if backend fails
-          }
-        } else if (user && apiClient) {
-          // Fallback: use post with method override if delete is not available
-          try {
-            await apiClient.post(`/pipelines/${pipelineId}`, {}, { headers: { 'X-HTTP-Method-Override': 'DELETE' } });
-            console.log('Pipeline deleted from backend');
-          } catch (error: any) {
-            console.warn('Failed to delete pipeline from backend:', error);
           }
         }
         
@@ -639,51 +677,28 @@ export const usePipelineStore = create<PipelineState>()(
         // Get dependencies from parameter or global store
         const effectiveDeps = deps || getDependencies();
         const user = effectiveDeps.authState?.user;
-        const apiClient = effectiveDeps.apiClient;
         
-        if (!user || !apiClient) {
-          console.log('[syncPipelines] User not authenticated or API client not available, skipping pipeline sync');
+        if (!user) {
+          console.log('[syncPipelines] User not authenticated, skipping pipeline sync');
+          return;
+        }
+        
+        // Try to use adapter for sync
+        const adapter = getPersistenceAdapter();
+        if (!adapter) {
+          console.log('[syncPipelines] No persistence adapter available, skipping pipeline sync');
           return;
         }
         
         try {
-          console.log('[syncPipelines] Fetching pipelines from backend for user:', user.id);
-          const response = await apiClient.get('/pipelines');
-          console.log('[syncPipelines] API response:', response.data);
-          const backendPipelines = response.data.pipelines || [];
-          console.log(`[syncPipelines] Found ${backendPipelines.length} pipelines in backend`);
+          console.log('[syncPipelines] Syncing pipelines from backend for user:', user.id);
           
-          // Convert dates and parse pipeline_json
-          const pipelines: Pipeline[] = await Promise.all(
-            backendPipelines.map(async (bp: any) => {
-              try {
-                console.log(`[syncPipelines] Loading full pipeline data for: ${bp.id}`);
-                // Fetch full pipeline data
-                const fullResponse = await apiClient.get(`/pipelines/${bp.id}`);
-                const fullPipeline = fullResponse.data.pipeline;
-                
-                // Convert dates
-                if (fullPipeline.createdAt) {
-                  fullPipeline.createdAt = new Date(fullPipeline.createdAt);
-                }
-                if (fullPipeline.updatedAt) {
-                  fullPipeline.updatedAt = new Date(fullPipeline.updatedAt);
-                }
-                
-                console.log(`[syncPipelines] Successfully loaded pipeline: ${fullPipeline.name || fullPipeline.id}`);
-                return fullPipeline;
-              } catch (error: any) {
-                console.error(`[syncPipelines] Failed to load full pipeline ${bp.id}:`, error);
-                if (error.response) {
-                  console.error(`[syncPipelines] Response status: ${error.response.status}`, error.response.data);
-                }
-                return null;
-              }
-            })
-          );
+          // Use adapter's sync method if available, otherwise use list
+          const validPipelines = adapter.sync 
+            ? await adapter.sync()
+            : await adapter.list();
           
-          // Filter out nulls
-          const validPipelines = pipelines.filter((p): p is Pipeline => p !== null);
+          console.log(`[syncPipelines] Found ${validPipelines.length} pipelines in backend`);
           
           // REPLACE all pipelines (don't merge) - ensures user-specific data
           // If backend returns empty array, initialize with empty pipelines
@@ -707,9 +722,9 @@ export const usePipelineStore = create<PipelineState>()(
               return currentTime > latestTime ? current : latest;
             });
             
-              // Only load if it's newer than localStorage draft
-              try {
-                const localDraft = localStorage.getItem(getDraftKey());
+            // Only load if it's newer than localStorage draft
+            try {
+              const localDraft = localStorage.getItem(getDraftKey());
               if (localDraft) {
                 const parsedLocal = JSON.parse(localDraft);
                 const localTime = parsedLocal.updatedAt ? new Date(parsedLocal.updatedAt).getTime() : 0;

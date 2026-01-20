@@ -1,12 +1,27 @@
 import React, { createContext, useContext, ReactNode, useEffect } from 'react';
 import { PipelineDependencies } from '../types/dependencies';
-import { setPipelineDependencies } from '../store/pipelineStore';
+import { PipelinePersistenceAdapter, NodeExecutionAdapter } from '../types/adapters';
+import { PipelineConfig } from '../types/config';
+import { setPipelineDependencies, setPipelineAdapters, setPipelineConfig } from '../store/pipelineStore';
 
 /**
  * Pipeline Context Value
  * All dependencies are optional to allow standalone usage
  */
-interface PipelineContextValue extends PipelineDependencies {}
+interface PipelineContextValue extends PipelineDependencies {
+  /**
+   * Optional pipeline persistence adapter
+   */
+  persistenceAdapter?: PipelinePersistenceAdapter;
+  /**
+   * Optional node execution adapter
+   */
+  executionAdapter?: NodeExecutionAdapter;
+  /**
+   * Optional pipeline configuration
+   */
+  config?: PipelineConfig;
+}
 
 /**
  * Pipeline Context
@@ -43,6 +58,21 @@ export interface PipelineProviderProps {
    * Optional error reporter for error tracking
    */
   errorReporter?: PipelineDependencies['errorReporter'];
+  /**
+   * Optional pipeline persistence adapter
+   * If not provided, will use default adapter with apiClient
+   */
+  persistenceAdapter?: PipelinePersistenceAdapter;
+  /**
+   * Optional node execution adapter
+   * If not provided, will use default execution engine
+   */
+  executionAdapter?: NodeExecutionAdapter;
+  /**
+   * Optional pipeline configuration
+   * Allows customization of endpoints and response transformers
+   */
+  config?: PipelineConfig;
 }
 
 /**
@@ -57,6 +87,9 @@ export const PipelineProvider: React.FC<PipelineProviderProps> = ({
   getAuthHeaders,
   logger,
   errorReporter,
+  persistenceAdapter,
+  executionAdapter,
+  config,
 }) => {
   const value: PipelineContextValue = {
     apiClient,
@@ -65,6 +98,9 @@ export const PipelineProvider: React.FC<PipelineProviderProps> = ({
     getAuthHeaders,
     logger,
     errorReporter,
+    persistenceAdapter,
+    executionAdapter,
+    config,
   };
 
   // Update store dependencies when context changes
@@ -74,6 +110,19 @@ export const PipelineProvider: React.FC<PipelineProviderProps> = ({
       authState,
       sessionId,
     });
+    
+    // Set adapters if provided
+    if (persistenceAdapter || executionAdapter) {
+      setPipelineAdapters({
+        persistence: persistenceAdapter,
+        execution: executionAdapter,
+      });
+    }
+    
+    // Set configuration if provided
+    if (config) {
+      setPipelineConfig(config);
+    }
     
     // Sync pipelines from backend when dependencies are available and user is authenticated
     // This ensures pipelines are loaded after login when PipelineProvider mounts
@@ -94,7 +143,7 @@ export const PipelineProvider: React.FC<PipelineProviderProps> = ({
       
       return () => clearTimeout(syncTimer);
     }
-  }, [apiClient, authState, sessionId]);
+  }, [apiClient, authState, sessionId, persistenceAdapter, executionAdapter, config]);
 
   return (
     <PipelineContext.Provider value={value}>

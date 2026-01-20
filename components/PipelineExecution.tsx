@@ -22,7 +22,7 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
     stopExecution,
   } = usePipelineStore();
   
-  const { sessionId } = usePipelineContext();
+  const { sessionId, config } = usePipelineContext();
   const effectiveSessionId = sessionId;
   
   // Debug: Log session ID
@@ -106,6 +106,10 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
               pipeline: currentPipeline,
               apiClient: nodeApiClient,
               sessionId: effectiveSessionId,
+              config: config ? {
+                endpoints: config.endpoints,
+                responseTransformers: config.responseTransformers,
+              } : undefined,
             });
           } catch (execError: any) {
             console.error(`[PipelineExecution] Error executing node ${nodeId}:`, execError);

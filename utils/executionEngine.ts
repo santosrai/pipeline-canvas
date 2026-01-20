@@ -11,6 +11,19 @@ interface ExecutionContext {
   pipeline: Pipeline;
   apiClient: ApiClient;
   sessionId?: string | null;
+  config?: {
+    endpoints?: {
+      nodes?: {
+        rfdiffusion?: string;
+        alphafold?: string;
+        proteinmpnn?: string;
+        generic?: string;
+      };
+    };
+    responseTransformers?: {
+      nodeExecution?: (response: any, nodeType: string) => any;
+    };
+  };
 }
 
 /**
@@ -187,6 +200,27 @@ export async function executeNode(
       let endpoint = executionConfig.endpoint;
       if (typeof endpoint === 'string' && endpoint.includes('{{')) {
         endpoint = resolveTemplates(endpoint, node, inputData) as string;
+      }
+      
+      // Check for config-based endpoint override
+      if (context.config?.endpoints?.nodes) {
+        const nodeEndpoints = context.config.endpoints.nodes;
+        // Map node types to endpoint config keys
+        const endpointMap: Record<string, keyof typeof nodeEndpoints> = {
+          'rfdiffusion_node': 'rfdiffusion',
+          'alphafold_node': 'alphafold',
+          'proteinmpnn_node': 'proteinmpnn',
+        };
+        
+        const endpointKey = endpointMap[node.type];
+        if (endpointKey && nodeEndpoints[endpointKey]) {
+          // Use config endpoint, but allow node config to override if it's a full URL
+          const configEndpoint = nodeEndpoints[endpointKey]!;
+          // Only use config endpoint if node endpoint is relative or empty
+          if (!endpoint || (!endpoint.startsWith('http://') && !endpoint.startsWith('https://'))) {
+            endpoint = configEndpoint;
+          }
+        }
       }
       
       // Fallback to defaultConfig if endpoint is empty (for HTTP Request nodes)

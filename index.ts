@@ -36,6 +36,8 @@ export type {
 export * from './types/index';
 export * from './types/dependencies';
 export * from './types/logger';
+export * from './types/adapters';
+export * from './types/config';
 
 // Export store and store types
 export { usePipelineStore, setPipelineDependencies } from './store/pipelineStore';
