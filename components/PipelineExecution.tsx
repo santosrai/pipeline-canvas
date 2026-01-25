@@ -4,6 +4,43 @@ import { usePipelineContext } from '../context/PipelineContext';
 import { Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { executeNode } from '../utils/executionEngine';
 
+/**
+ * Sanitize file_url to ensure it's a server URL, not a blob URL
+ * Blob URLs cannot be stored or used reliably across sessions
+ */
+function sanitizeFileUrl(fileUrl: string | undefined, fileId: string | undefined): string | undefined {
+  if (!fileUrl) return undefined;
+  
+  // If it's a blob URL, replace it with server URL
+  if (fileUrl.startsWith('blob:')) {
+    if (fileId) {
+      return `${window.location.origin}/api/upload/pdb/${fileId}`;
+    }
+    return undefined;
+  }
+  
+  // Ensure relative paths are absolute
+  if (fileUrl.startsWith('/')) {
+    return `${window.location.origin}${fileUrl}`;
+  }
+  
+  return fileUrl;
+}
+
+/**
+ * Sanitize file data object to ensure file_url is not a blob URL
+ */
+function sanitizeFileData(fileData: any): any {
+  if (!fileData || typeof fileData !== 'object') return fileData;
+  
+  const sanitized = { ...fileData };
+  if (sanitized.file_url) {
+    sanitized.file_url = sanitizeFileUrl(sanitized.file_url, sanitized.file_id);
+  }
+  
+  return sanitized;
+}
+
 interface ApiClient {
   post: (endpoint: string, data: any, config?: { headers?: Record<string, string>; method?: string }) => Promise<any>;
   get: (endpoint: string, config?: { headers?: Record<string, string> }) => Promise<any>;
@@ -142,14 +179,17 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
               
               // For input nodes, store all file metadata
               if (node.type === 'input_node' && result.data) {
+                // Sanitize file data to ensure file_url is not a blob URL
+                const sanitizedData = sanitizeFileData(result.data);
+                
                 // Store the full file data including all metadata
-                resultMetadata.file_info = result.data;
-                resultMetadata.type = result.data.type || 'pdb_file';
-                resultMetadata.filename = result.data.filename;
-                resultMetadata.file_id = result.data.file_id;
-                resultMetadata.file_url = result.data.file_url;
+                resultMetadata.file_info = sanitizedData;
+                resultMetadata.type = sanitizedData.type || 'pdb_file';
+                resultMetadata.filename = sanitizedData.filename;
+                resultMetadata.file_id = sanitizedData.file_id;
+                resultMetadata.file_url = sanitizedData.file_url;
                 // Also store in data for consistency
-                resultMetadata.data = result.data;
+                resultMetadata.data = sanitizedData;
               } else {
                 // Special handling for RFdiffusion nodes - extract filepath from response
                 if (node.type === 'rfdiffusion_node') {

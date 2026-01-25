@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { getAuthHeaders as getAppAuthHeaders } from '../../../utils/api';
 
 // Theme-aware styles matching app's slate color scheme
 const getThemeStyles = (isDark: boolean) => ({
@@ -55,7 +56,7 @@ const getInputDataForNode = (
   // Get input data based on source node type
   if (sourceNode.type === 'input_node') {
     // Prioritize result_metadata (from execution) over config
-    const fileInfo = sourceNode.result_metadata?.file_info || sourceNode.result_metadata?.data || {
+    let fileInfo = sourceNode.result_metadata?.file_info || sourceNode.result_metadata?.data || {
         type: 'pdb_file',
         filename: sourceNode.config?.filename,
         file_id: sourceNode.config?.file_id,
@@ -66,6 +67,22 @@ const getInputDataForNode = (
       chain_residue_counts: sourceNode.config?.chain_residue_counts,
       atoms: sourceNode.config?.atoms,
     };
+    
+    // Sanitize file_url: ensure it's not a blob URL
+    if (fileInfo.file_url && fileInfo.file_url.startsWith('blob:')) {
+      // Replace blob URL with server URL
+      const fileId = fileInfo.file_id || sourceNode.config?.file_id;
+      if (fileId) {
+        fileInfo = { ...fileInfo, file_url: `${window.location.origin}/api/upload/pdb/${fileId}` };
+      } else {
+        fileInfo = { ...fileInfo };
+        delete fileInfo.file_url;
+      }
+    } else if (fileInfo.file_url && fileInfo.file_url.startsWith('/')) {
+      // Ensure relative paths are absolute
+      fileInfo = { ...fileInfo, file_url: `${window.location.origin}${fileInfo.file_url}` };
+    }
+    
     return {
       sourceNode,
       inputData: fileInfo,
@@ -266,8 +283,8 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
       const formData = new FormData();
       formData.append('file', file);
 
-      // Get auth headers for the request (if available)
-      const headers = getAuthHeaders ? getAuthHeaders() : {};
+      // Get auth headers - use pipeline context if available, otherwise fallback to app's getAuthHeaders
+      const headers = getAuthHeaders ? getAuthHeaders() : getAppAuthHeaders();
 
       const response = await fetch('/api/upload/pdb', {
         method: 'POST',
@@ -292,12 +309,25 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
       const latestNode = usePipelineStore.getState().currentPipeline?.nodes.find((n) => n.id === nodeId);
       const currentConfig = latestNode?.config || node.config || {};
       
+      // Sanitize file_url: ensure it's a server URL, not a blob URL
+      // If server returns relative path, make it absolute. Never store blob URLs.
+      let fileUrl = result.file_info.file_url || `/api/upload/pdb/${result.file_info.file_id}`;
+      if (fileUrl.startsWith('blob:')) {
+        // If somehow a blob URL got through, replace it with server URL
+        console.warn('[PipelineNodeConfig] Blob URL detected in file_url, replacing with server URL');
+        fileUrl = `/api/upload/pdb/${result.file_info.file_id}`;
+      }
+      // Ensure it's an absolute URL if it's a relative path
+      if (fileUrl.startsWith('/')) {
+        fileUrl = `${window.location.origin}${fileUrl}`;
+      }
+      
       // Update all config values at once to avoid race conditions
       const updatedConfig = {
         ...currentConfig,
         filename: result.file_info.filename,
         file_id: result.file_info.file_id,
-        file_url: result.file_info.file_url,
+        file_url: fileUrl,
         ...(result.file_info.chain_residue_counts && { chain_residue_counts: result.file_info.chain_residue_counts }),
         ...(result.file_info.total_residues && { total_residues: result.file_info.total_residues }),
         ...(result.file_info.suggested_contigs && { suggested_contigs: result.file_info.suggested_contigs }),
@@ -2076,20 +2106,54 @@ return {
                   if (node?.type === 'input_node') {
                     // Check result_metadata first (stored after execution)
                     if (node.result_metadata?.file_info) {
-                      outputData = node.result_metadata.file_info;
+                      outputData = { ...node.result_metadata.file_info };
+                      // Sanitize file_url if it's a blob URL
+                      if (outputData.file_url && outputData.file_url.startsWith('blob:')) {
+                        // Replace blob URL with server URL
+                        const fileId = outputData.file_id || node.config?.file_id;
+                        if (fileId) {
+                          outputData.file_url = `${window.location.origin}/api/upload/pdb/${fileId}`;
+                        } else {
+                          delete outputData.file_url;
+                        }
+                      }
                     } else if (node.result_metadata?.data) {
                       outputData = node.result_metadata.data;
+                      // Sanitize file_url if present and it's a blob URL
+                      if (outputData && typeof outputData === 'object' && outputData.file_url && outputData.file_url.startsWith('blob:')) {
+                        const fileId = outputData.file_id || node.config?.file_id;
+                        if (fileId) {
+                          outputData.file_url = `${window.location.origin}/api/upload/pdb/${fileId}`;
+                        } else {
+                          delete outputData.file_url;
+                        }
+                      }
                     } else if (nodeLog?.output?.data) {
                       outputData = nodeLog.output.data;
                     } else if (nodeLog?.output) {
                       outputData = nodeLog.output;
                     } else if (node.config?.filename || node.config?.file_id) {
                       // Show config data if no execution log exists yet
+                      // Sanitize file_url to ensure it's not a blob URL
+                      let configFileUrl = node.config.file_url;
+                      if (configFileUrl && configFileUrl.startsWith('blob:')) {
+                        // Replace blob URL with server URL
+                        const fileId = node.config.file_id;
+                        if (fileId) {
+                          configFileUrl = `${window.location.origin}/api/upload/pdb/${fileId}`;
+                        } else {
+                          configFileUrl = undefined;
+                        }
+                      } else if (configFileUrl && configFileUrl.startsWith('/')) {
+                        // Ensure relative paths are absolute
+                        configFileUrl = `${window.location.origin}${configFileUrl}`;
+                      }
+                      
                       outputData = {
                         type: 'pdb_file',
                         filename: node.config.filename || 'Unknown',
                         file_id: node.config.file_id,
-                        file_url: node.config.file_url,
+                        file_url: configFileUrl,
                         chains: node.config.chains,
                         total_residues: node.config.total_residues,
                         suggested_contigs: node.config.suggested_contigs,

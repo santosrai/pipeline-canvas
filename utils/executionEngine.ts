@@ -2,6 +2,43 @@ import { PipelineNode, Pipeline } from '../types/index';
 import { loadNodeConfig, NodeDefinition, HandleDefinition } from './nodeLoader';
 import { resolveTemplates } from './templateResolver';
 
+/**
+ * Sanitize file_url to ensure it's a server URL, not a blob URL
+ * Blob URLs cannot be stored or used reliably across sessions
+ */
+function sanitizeFileUrl(fileUrl: string | undefined, fileId: string | undefined): string | undefined {
+  if (!fileUrl) return undefined;
+  
+  // If it's a blob URL, replace it with server URL
+  if (fileUrl.startsWith('blob:')) {
+    if (fileId) {
+      return `${window.location.origin}/api/upload/pdb/${fileId}`;
+    }
+    return undefined;
+  }
+  
+  // Ensure relative paths are absolute
+  if (fileUrl.startsWith('/')) {
+    return `${window.location.origin}${fileUrl}`;
+  }
+  
+  return fileUrl;
+}
+
+/**
+ * Sanitize file data object to ensure file_url is not a blob URL
+ */
+function sanitizeFileData(fileData: any): any {
+  if (!fileData || typeof fileData !== 'object') return fileData;
+  
+  const sanitized = { ...fileData };
+  if (sanitized.file_url) {
+    sanitized.file_url = sanitizeFileUrl(sanitized.file_url, sanitized.file_id);
+  }
+  
+  return sanitized;
+}
+
 interface ApiClient {
   post: (endpoint: string, data: any, config?: { headers?: Record<string, string> }) => Promise<any>;
   get: (endpoint: string, config?: { headers?: Record<string, string> }) => Promise<any>;
@@ -69,17 +106,18 @@ async function getInputData(
         return sourceNode.result_metadata.data;
       } else {
         // Fallback to config data
-        return {
+        const fileData = {
           type: 'pdb_file',
           filename: sourceNode.config?.filename,
           file_id: sourceNode.config?.file_id,
-          file_url: sourceNode.config?.file_url,
+          file_url: sanitizeFileUrl(sourceNode.config?.file_url, sourceNode.config?.file_id),
           chains: sourceNode.config?.chains,
           total_residues: sourceNode.config?.total_residues,
           suggested_contigs: sourceNode.config?.suggested_contigs,
           chain_residue_counts: sourceNode.config?.chain_residue_counts,
           atoms: sourceNode.config?.atoms,
         };
+        return fileData;
       }
     }
   }
@@ -889,7 +927,7 @@ export async function executeNode(
       }
       // In a real implementation, you might want to verify the file exists
       // For now, we'll just return success with consistent structure
-      const fileData = {
+      const fileData = sanitizeFileData({
         type: 'pdb_file',
         filename: filename,
         file_id: node.config?.file_id,
@@ -899,7 +937,7 @@ export async function executeNode(
         suggested_contigs: node.config?.suggested_contigs,
         chain_residue_counts: node.config?.chain_residue_counts,
         atoms: node.config?.atoms,
-      };
+      });
       return {
         data: fileData,
         request: {
