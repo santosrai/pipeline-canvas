@@ -12,10 +12,10 @@ const HttpRequestNode: React.FC<{ data: any }> = ({ data }) => {
     : 'No URL';
 
   const content = (
-    <div className="text-xs text-gray-500 space-y-1 pl-10">
+    <div className="text-xs text-[hsl(var(--pc-text-muted))] space-y-1 pl-10">
       <div className="flex items-center gap-2">
         <span className="font-medium">{data.config?.method || 'GET'}</span>
-        <span className="text-gray-400">•</span>
+        <span className="text-[hsl(var(--pc-text-secondary))]">•</span>
         <span className="truncate">{urlPreview}</span>
       </div>
       {data.error && <ErrorDisplay error={data.error} />}

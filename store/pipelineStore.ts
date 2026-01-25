@@ -5,7 +5,6 @@ import { topologicalSort } from '../utils/topologicalSort';
 import { ApiClient, AuthState } from '../types/dependencies';
 import { PipelinePersistenceAdapter, NodeExecutionAdapter, NovoProteinAdapter } from '../types/adapters';
 import { PipelineConfig } from '../types/config';
-import { useAuthStore } from '../../../stores/authStore';
 
 // Execution log entry for tracking node execution history
 export interface ExecutionLogEntry {
@@ -162,6 +161,16 @@ export const setPipelineConfig = (config: PipelineConfig) => {
 const getDependencies = () => globalDependencies;
 
 /**
+ * Helper to get user ID from dependencies
+ * Uses dependency injection set via setPipelineDependencies()
+ * When used in parent app, authState should be provided via PipelineProvider
+ */
+const getUserId = (): string => {
+  const deps = getDependencies();
+  return deps.authState?.user?.id || 'anonymous';
+};
+
+/**
  * Get persistence adapter (with fallback to default)
  */
 const getPersistenceAdapter = (): PipelinePersistenceAdapter | null => {
@@ -195,8 +204,7 @@ const getPersistenceAdapter = (): PipelinePersistenceAdapter | null => {
 // Debounce timer for auto-save (shared across store instances)
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 const getDraftKey = () => {
-  const user = useAuthStore.getState().user;
-  const userId = user?.id || 'anonymous';
+  const userId = getUserId();
   return `novoprotein-pipeline-draft-${userId}`;
 };
 const UNNAMED_PIPELINE_NAME = 'Unnamed Pipeline';
@@ -1050,20 +1058,17 @@ export const usePipelineStore = create<PipelineState>()(
         // Create user-scoped storage adapter
         return {
           getItem: (_key: string) => {
-            const user = useAuthStore.getState().user;
-            const userId = user?.id || 'anonymous';
+            const userId = getUserId();
             const userKey = `novoprotein-pipeline-storage-${userId}`;
             return localStorage.getItem(userKey);
           },
           setItem: (_key: string, value: string) => {
-            const user = useAuthStore.getState().user;
-            const userId = user?.id || 'anonymous';
+            const userId = getUserId();
             const userKey = `novoprotein-pipeline-storage-${userId}`;
             localStorage.setItem(userKey, value);
           },
           removeItem: (_key: string) => {
-            const user = useAuthStore.getState().user;
-            const userId = user?.id || 'anonymous';
+            const userId = getUserId();
             const userKey = `novoprotein-pipeline-storage-${userId}`;
             localStorage.removeItem(userKey);
           },
@@ -1078,8 +1083,10 @@ export const usePipelineStore = create<PipelineState>()(
       onRehydrateStorage: () => (state) => {
         if (state) {
           try {
-            // Check if user is authenticated - if not, return empty state
-            const user = useAuthStore.getState().user;
+            // Check if user is authenticated via dependency injection
+            const deps = getDependencies();
+            const user = deps.authState?.user;
+            
             if (!user) {
               console.log('[PipelineStore] No user authenticated, clearing pipeline data');
               state.clearPipeline();

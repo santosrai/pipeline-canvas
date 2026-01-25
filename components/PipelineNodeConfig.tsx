@@ -10,7 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Button } from './ui/button';
 import { Alert, AlertDescription } from './ui/alert';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
-import { getAuthHeaders as getAppAuthHeaders } from '../../../utils/api';
 
 // Theme-aware styles matching app's slate color scheme
 const getThemeStyles = (isDark: boolean) => ({
@@ -283,8 +282,9 @@ export const PipelineNodeConfig: React.FC<PipelineNodeConfigProps> = ({
       const formData = new FormData();
       formData.append('file', file);
 
-      // Get auth headers - use pipeline context if available, otherwise fallback to app's getAuthHeaders
-      const headers = getAuthHeaders ? getAuthHeaders() : getAppAuthHeaders();
+      // Get auth headers from pipeline context (if provided via PipelineProvider)
+      // If not provided, requests will be made without auth headers
+      const headers = getAuthHeaders ? getAuthHeaders() : {};
 
       const response = await fetch('/api/upload/pdb', {
         method: 'POST',

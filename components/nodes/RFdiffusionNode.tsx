@@ -6,7 +6,7 @@ import { ErrorDisplay } from './ErrorDisplay';
 
 const RFdiffusionNode: React.FC<{ data: any }> = ({ data }) => {
   const content = (
-    <div className="text-xs text-gray-500 space-y-1 pl-10">
+    <div className="text-xs text-[hsl(var(--pc-text-muted))] space-y-1 pl-10">
       <div>Contigs: {data.config?.contigs || 'N/A'}</div>
       {data.error && <ErrorDisplay error={data.error} />}
     </div>

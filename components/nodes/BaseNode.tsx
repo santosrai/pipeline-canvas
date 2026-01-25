@@ -183,7 +183,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
     <div className="flex flex-col items-center">
       <div
         className={`
-          px-4 py-3 bg-white border-2 rounded-xl min-w-[220px] relative transition-all duration-300
+          px-4 py-3 bg-[hsl(var(--pc-node-bg))] border-2 rounded-xl min-w-[220px] relative transition-all duration-300
           ${statusClasses}
         `}
         onClick={handleClick}
@@ -202,7 +202,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
             >
               <Icon className="w-4 h-4" />
             </NodeIconBadge>
-            <span className="font-semibold text-sm text-gray-900">{label}</span>
+            <span className="font-semibold text-sm text-[hsl(var(--pc-text-primary))]">{label}</span>
           </div>
           {statusIcon}
         </div>

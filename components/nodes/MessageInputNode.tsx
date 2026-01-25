@@ -11,7 +11,7 @@ const MessageInputNode: React.FC<{ data: any }> = ({ data }) => {
     : 'No code';
 
   const content = (
-    <div className="text-xs text-gray-500 pl-10 font-mono">{codePreview}</div>
+    <div className="text-xs text-[hsl(var(--pc-text-muted))] pl-10 font-mono">{codePreview}</div>
   );
 
   return (

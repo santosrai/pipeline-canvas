@@ -505,9 +505,9 @@ export const PipelineExecution: React.FC<PipelineExecutionProps> = ({ apiClient 
   const totalCount = currentPipeline.nodes.length;
 
   return (
-    <div className="fixed bottom-4 right-4 bg-white border border-gray-200 rounded-lg shadow-lg p-4 z-50 min-w-[300px]">
+    <div className="fixed bottom-4 right-4 pc-bg-panel border border-gray-200 rounded-lg shadow-lg p-4 z-50 min-w-[300px]">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-900">Pipeline Execution</h3>
+        <h3 className="text-sm font-semibold text-[hsl(var(--pc-text-primary))]">Pipeline Execution</h3>
         <button
           onClick={stopExecution}
           className="text-xs text-red-600 hover:text-red-700"

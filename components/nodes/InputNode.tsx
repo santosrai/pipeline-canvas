@@ -8,7 +8,7 @@ const InputNode: React.FC<{ data: any }> = ({ data }) => {
   // Both single and double clicks will open the settings panel
 
   const content = (
-    <div className="text-xs text-gray-500 pl-10">
+    <div className="text-xs text-[hsl(var(--pc-text-muted))] pl-10">
       {data.config?.filename || 'No file selected'}
     </div>
   );

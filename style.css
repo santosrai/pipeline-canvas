@@ -635,3 +635,132 @@ html.dark [data-radix-dialog-content],
   background: hsl(var(--pc-muted-foreground));
   border-radius: 4px;
 }
+
+/* ============================================================================
+   Tailwind Color Overrides (Scoped to Pipeline Canvas)
+   
+   Override hardcoded Tailwind classes to use pipeline canvas theme variables.
+   This ensures proper theming without modifying every component.
+   ============================================================================ */
+
+/* Border overrides - Light theme (default) */
+.pipeline-canvas-root .border-gray-200 {
+  border-color: #e5e7eb; /* gray-200 */
+}
+
+.pipeline-canvas-root .border-gray-300 {
+  border-color: #d1d5db; /* gray-300 */
+}
+
+/* Border overrides - Dark theme */
+.pipeline-canvas-root[data-theme="dark"] .border-gray-200,
+.pipeline-canvas-root.dark .border-gray-200 {
+  border-color: rgb(55 65 81); /* gray-700 */
+}
+
+.pipeline-canvas-root[data-theme="dark"] .border-gray-300,
+.pipeline-canvas-root.dark .border-gray-300 {
+  border-color: rgb(75 85 99); /* gray-600 */
+}
+
+/* Background overrides - Dark theme */
+.pipeline-canvas-root[data-theme="dark"] .bg-white,
+.pipeline-canvas-root.dark .bg-white {
+  background-color: hsl(var(--pc-card));
+}
+
+.pipeline-canvas-root[data-theme="dark"] .bg-gray-50,
+.pipeline-canvas-root.dark .bg-gray-50 {
+  background-color: hsl(var(--pc-background));
+}
+
+.pipeline-canvas-root[data-theme="dark"] .bg-gray-100,
+.pipeline-canvas-root.dark .bg-gray-100 {
+  background-color: hsl(var(--pc-muted));
+}
+
+/* Text overrides - Dark theme */
+.pipeline-canvas-root[data-theme="dark"] .text-gray-900,
+.pipeline-canvas-root.dark .text-gray-900 {
+  color: hsl(var(--pc-text-primary));
+}
+
+.pipeline-canvas-root[data-theme="dark"] .text-gray-800,
+.pipeline-canvas-root.dark .text-gray-800 {
+  color: hsl(var(--pc-text-primary));
+}
+
+.pipeline-canvas-root[data-theme="dark"] .text-gray-700,
+.pipeline-canvas-root.dark .text-gray-700 {
+  color: hsl(var(--pc-text-secondary));
+}
+
+.pipeline-canvas-root[data-theme="dark"] .text-gray-600,
+.pipeline-canvas-root.dark .text-gray-600 {
+  color: hsl(var(--pc-text-secondary));
+}
+
+.pipeline-canvas-root[data-theme="dark"] .text-gray-500,
+.pipeline-canvas-root.dark .text-gray-500 {
+  color: hsl(var(--pc-text-muted));
+}
+
+.pipeline-canvas-root[data-theme="dark"] .text-gray-400,
+.pipeline-canvas-root.dark .text-gray-400 {
+  color: hsl(var(--pc-text-muted));
+}
+
+/* Placeholder text - Dark theme */
+.pipeline-canvas-root[data-theme="dark"] .placeholder-gray-500::placeholder,
+.pipeline-canvas-root.dark .placeholder-gray-500::placeholder {
+  color: hsl(var(--pc-text-muted));
+}
+
+/* Hover states - Dark theme */
+.pipeline-canvas-root[data-theme="dark"] .hover\:bg-gray-50:hover,
+.pipeline-canvas-root.dark .hover\:bg-gray-50:hover {
+  background-color: hsl(var(--pc-muted));
+}
+
+.pipeline-canvas-root[data-theme="dark"] .hover\:bg-gray-100:hover,
+.pipeline-canvas-root.dark .hover\:bg-gray-100:hover {
+  background-color: hsl(var(--pc-muted));
+}
+
+.pipeline-canvas-root[data-theme="dark"] .hover\:border-gray-300:hover,
+.pipeline-canvas-root.dark .hover\:border-gray-300:hover {
+  border-color: rgb(75 85 99); /* gray-600 */
+}
+
+/* Input/Form element overrides - Dark theme */
+.pipeline-canvas-root[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+.pipeline-canvas-root.dark input:not([type="checkbox"]):not([type="radio"]),
+.pipeline-canvas-root[data-theme="dark"] textarea,
+.pipeline-canvas-root.dark textarea,
+.pipeline-canvas-root[data-theme="dark"] select,
+.pipeline-canvas-root.dark select {
+  background-color: hsl(var(--pc-muted));
+  border-color: rgb(55 65 81); /* gray-700 */
+  color: hsl(var(--pc-text-primary));
+}
+
+.pipeline-canvas-root[data-theme="dark"] input::placeholder,
+.pipeline-canvas-root.dark input::placeholder,
+.pipeline-canvas-root[data-theme="dark"] textarea::placeholder,
+.pipeline-canvas-root.dark textarea::placeholder {
+  color: hsl(var(--pc-text-muted));
+}
+
+/* Shadow adjustments for dark mode */
+.pipeline-canvas-root[data-theme="dark"] .shadow,
+.pipeline-canvas-root.dark .shadow,
+.pipeline-canvas-root[data-theme="dark"] .shadow-sm,
+.pipeline-canvas-root.dark .shadow-sm,
+.pipeline-canvas-root[data-theme="dark"] .shadow-md,
+.pipeline-canvas-root.dark .shadow-md,
+.pipeline-canvas-root[data-theme="dark"] .shadow-lg,
+.pipeline-canvas-root.dark .shadow-lg,
+.pipeline-canvas-root[data-theme="dark"] .shadow-xl,
+.pipeline-canvas-root.dark .shadow-xl {
+  --tw-shadow-color: rgba(0, 0, 0, 0.4);
+}
