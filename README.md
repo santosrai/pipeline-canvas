@@ -20,7 +20,6 @@ npm install git+https://YOUR_TOKEN@github.com/santosrai/pipeline-canvas.git
 
 ```bash
 npm install git+ssh://git@github.com:santosrai/pipeline-canvas.git#main
-npm install git+ssh://git@github.com:santosrai/pipeline-canvas.git#v1.0.0
 ```
 
 ## Setup
