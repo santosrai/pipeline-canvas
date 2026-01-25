@@ -453,11 +453,27 @@ html.dark .pc-bg-panel,
   background-color: #252540;
 }
 
-/* Dialog background fix for portalled content - ensure opaque background */
-/* Set CSS variable at root for light theme */
+/* Dialog and Select background fix for portalled content - ensure opaque background */
+/* Set CSS variables at root for light theme */
 :root {
   --dialog-bg-light: #ffffff;
   --dialog-bg-dark: #1e1e2e;
+  --select-bg: #ffffff;
+  --select-text: #1f2937;
+  --select-hover: #f3f4f6;
+}
+
+/* Dark mode variables for select */
+html.dark {
+  --select-bg: #1e293b;
+  --select-text: #f1f5f9;
+  --select-hover: #334155;
+}
+
+.dark {
+  --select-bg: #1e293b;
+  --select-text: #f1f5f9;
+  --select-hover: #334155;
 }
 
 /* Light theme (default) - must come first and be very specific */
@@ -482,6 +498,37 @@ html.dark [data-radix-dialog-content],
   background-color: var(--dialog-bg-dark, #1e1e2e) !important;
   opacity: 1 !important;
   backdrop-filter: none !important;
+}
+
+/* Select dropdown styles for portalled content - uses CSS variables for theme switching */
+.pc-select-content {
+  background-color: var(--select-bg, #ffffff) !important;
+  color: var(--select-text, #1f2937) !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+}
+
+.pc-select-viewport {
+  background-color: var(--select-bg, #ffffff) !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+}
+
+/* Radix Select portal wrapper - force opaque */
+[data-radix-popper-content-wrapper] {
+  background-color: transparent !important;
+}
+
+.pc-select-item {
+  color: var(--select-text, #1f2937) !important;
+}
+
+.pc-select-item:hover,
+.pc-select-item:focus,
+.pc-select-item[data-highlighted] {
+  background-color: var(--select-hover, #f3f4f6) !important;
+  color: var(--select-text, #1f2937) !important;
+  outline: none;
 }
 
 /* Text utilities */
